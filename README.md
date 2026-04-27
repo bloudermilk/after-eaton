@@ -4,8 +4,8 @@
 
 ## Data Sources
 
-* [EPIC-LA Fire Recovery Cases](https://lacounty.maps.arcgis.com/home/item.html?id=e87c8fcf5a2c4f7e87198b0c208d3d9f) ([service](https://services.arcgis.com/RmCCgQtiZLDCtblq/arcgis/rest/services/EPICLA_Eaton_Palisades/FeatureServer)) - building plans, permits, rebuild progress
-* [2025 Parcels with DINS data](https://data.lacounty.gov/datasets/lacounty::2025-parcels-with-dins-data/about) ([service](https://services.arcgis.com/RmCCgQtiZLDCtblq/ArcGIS/rest/services/2025_Parcels_with_DINS_data/FeatureServer/5)) - pre-fire assessor parcel data, fire impact
+* [EPIC-LA Fire Recovery Cases](https://lacounty.maps.arcgis.com/home/item.html?id=e87c8fcf5a2c4f7e87198b0c208d3d9f) ([API service](https://services.arcgis.com/RmCCgQtiZLDCtblq/arcgis/rest/services/EPICLA_Eaton_Palisades/FeatureServer)) - building plans, permits, rebuild progress
+* [2025 Parcels with DINS data](https://data.lacounty.gov/datasets/lacounty::2025-parcels-with-dins-data/about) ([API service](https://services.arcgis.com/RmCCgQtiZLDCtblq/ArcGIS/rest/services/2025_Parcels_with_DINS_data/FeatureServer/5)) - pre-fire assessor parcel data, fire impact
 
 ## Parcel Analysis
 
