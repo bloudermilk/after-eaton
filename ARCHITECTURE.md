@@ -1,6 +1,6 @@
 # Architecture
 
-For project overview, data source descriptions, and contributor quickstart, see [README.md](./README.md). This document covers internal architecture and is the primary reference for code changes.
+For project overview and data source descriptions, see [README.md](./README.md). For end-to-end analytical methodology — what every output field means and how it was computed — see [METHODOLOGY.md](./METHODOLOGY.md). This document covers internal architecture and is the primary reference for code changes.
 
 ## High-level architecture
 
@@ -19,8 +19,8 @@ For project overview, data source descriptions, and contributor quickstart, see 
 │  (workflow_dispatch allowed) │                        │
 │                              │                        │
 │  Python 3.11+                │                        │
-│   fetch → join → aggregate   │                        │
-│   → write outputs            │                        │
+│   fetch → join → analyze     │                        │
+│   → QC → aggregate → write   │                        │
 └──────────────┬───────────────┘                        │
                │ gh release upload --clobber            │
                ▼                                        │
@@ -31,9 +31,9 @@ For project overview, data source descriptions, and contributor quickstart, see 
 │  Assets:                     │
 │    parcels.geojson           │
 │    summary.json              │
-│    tract_aggregates.csv      │
-│    block_aggregates.csv      │
-│    altagether_aggregates.csv │
+│    qc-report.json            │
+│    source-dins.json          │
+│    source-epicla.json        │
 └──────────────────────────────┘
 ```
 
@@ -45,23 +45,24 @@ The site is fully static. There is no backend, no database, and no user state. T
 .
 ├── .github/
 │   └── workflows/
-│       ├── pipeline.yml          # scheduled data pipeline
-│       └── deploy.yml            # frontend build + Pages deploy
+│       ├── pipeline.yml          # scheduled data pipeline (TODO: not yet committed)
+│       └── deploy.yml            # frontend build + Pages deploy (TODO: not yet committed)
 ├── pipeline/                     # Python data processing
 │   ├── pyproject.toml
 │   ├── src/after_eaton/
-│   │   ├── sources/              # ArcGIS fetchers, one per feature server
-│   │   ├── processing/           # joins, normalization, aggregation
-│   │   └── outputs/              # GeoJSON / JSON / CSV writers
-│   ├── tests/
-│   └── fixtures/                 # recorded ArcGIS responses for offline runs
-├── web/                          # Vue 3 + Vite frontend
-│   ├── package.json
-│   ├── vite.config.ts
-│   ├── src/
-│   └── public/
+│   │   ├── cli.py                # click entrypoint, wires the run
+│   │   ├── sources/              # ArcGIS fetchers + typed schemas
+│   │   ├── processing/           # join, normalize, parse, analyze, aggregate
+│   │   ├── qc/                   # per-record warnings + threshold gates
+│   │   └── outputs/              # GeoJSON / JSON writers
+│   └── tests/
+│       ├── conftest.py           # auto-discovers QA fixtures
+│       ├── fixtures/qa/*.json    # hand-verified per-parcel regression cases
+│       └── test_*.py             # unit + integration tests
+├── web/                          # Vue 3 + Vite frontend (TODO: not yet started)
 ├── data/                         # local pipeline output (gitignored)
-├── ARCHITECTURE.md
+├── ARCHITECTURE.md               # this file
+├── METHODOLOGY.md                # analytical methodology, attribute-level docs
 ├── README.md
 └── LICENSE
 ```
@@ -70,31 +71,83 @@ The pipeline and frontend are decoupled. The pipeline writes to `data/` locally 
 
 ## Data pipeline
 
+The pipeline is a single Python package, `after_eaton`, exposing one CLI entrypoint (`after-eaton`). A run executes this pipeline in order; if any step fails, no release is published.
+
+```
+fetch DINS                    → sources/dins.py
+fetch EPIC-LA                 → sources/epicla.py
+   → write raw snapshots to data/
+validate schemas              → sources/schemas.py        (raises SchemaError)
+join cases to parcels by AIN  → processing/join.py
+analyze each parcel           → processing/parcel_analysis.py
+   ├─ pre-fire from DINS slots
+   ├─ post-fire from EPIC-LA primary permit
+   ├─ parse DESCRIPTION       → processing/description_parser.py
+   ├─ resolve LFL signals     → processing/parcel_analysis.py:_resolve_lfl
+   └─ normalize damage / BSD  → processing/normalize.py
+QC:
+   ├─ per-record warnings     → qc/per_record.py          (collected, not fatal)
+   └─ aggregate thresholds    → qc/aggregate.py           (raise QcFailedError)
+write qc-report.json
+aggregate to burn-area totals → processing/aggregate.py
+write summary.json
+write parcels.geojson
+```
+
+For the analytical contract — what each derived field *means* — see [METHODOLOGY.md](./METHODOLOGY.md). This file describes the *shape* of the code.
+
+### Module responsibilities
+
+| Module | Responsibility | Key types/functions |
+|---|---|---|
+| `sources/arcgis.py` | Paginated FeatureServer fetcher with retry. Drops null-geometry features. | `fetch_all()`, `SourceError` |
+| `sources/dins.py` | Thin wrapper: pulls `COMMUNITY = 'Altadena'` from the DINS layer. | `fetch_dins_parcels()` |
+| `sources/epicla.py` | Thin wrapper: pulls `DISASTER_TYPE = 'Eaton Fire (01-2025)'` from EPIC-LA layer 0. | `fetch_epicla_cases()` |
+| `sources/schemas.py` | TypedDict definitions and `validate_*` functions. Required-field type checks; raises `SchemaError` (with `field=`) on drift. | `DinsParcel`, `EpicCase`, `validate_dins`, `validate_epicla` |
+| `processing/normalize.py` | Damage and BSD enums + raw→canonical maps. Rebuild-progress label table. | `DamageLevel`, `BsdStatus`, `normalize_damage`, `normalize_bsd`, `rebuild_progress_label` |
+| `processing/description_parser.py` | EPIC-LA free-text parser: splits a DESCRIPTION into structures, classifies each as `sfr`/`adu`/`jadu`/`sb9`/`mfr`/`garage`/`temporary_housing`/`repair`/`retaining_wall`/`seismic`/`unknown`, extracts sqft. Also extracts LFL/Custom claim from PROJECT_NAME or DESCRIPTION. | `parse_description()`, `extract_lfl_claim()`, `ParsedStructure`, `RESIDENTIAL_TYPES` |
+| `processing/join.py` | Group cases by `MAIN_AIN`, left-join to DINS parcels. Logs unmatched AINs. | `join_cases_to_parcels()`, `JoinedParcel` |
+| `processing/parcel_analysis.py` | Per-parcel synthesis. Reads DINS structure slots for pre-fire; selects primary permit for post-fire; runs LFL resolution; computes size comparison and SB-9/ADU deltas. | `analyze_parcel()`, `ParcelResult`, `_resolve_lfl()`, `_select_primary_permit()` |
+| `processing/aggregate.py` | Roll `ParcelResult` list into `SummaryResult` (counts only, no per-parcel detail). | `aggregate_burn_area()`, `SummaryResult` |
+| `qc/per_record.py` | Per-parcel data-quality warnings. Each warning carries a `severity` of `data` (counts toward threshold) or `info` (real-world ambiguity, surfaced but doesn't gate the run). | `check_record()`, `RecordWarning` |
+| `qc/aggregate.py` | Four hard-fail dataset-level checks. Constants at top of file are tunable. | `check_thresholds()`, `ThresholdCheck`, `QcFailedError` |
+| `qc/report.py` | Formats and writes `qc-report.json`; pretty-prints to stdout. | `QcReport`, `print_report`, `write_report`, `enforce` |
+| `outputs/geojson_writer.py` | Per-feature GeoJSON output. Converts ArcGIS rings to GeoJSON Polygon/MultiPolygon. | `write_parcels_geojson()` |
+| `outputs/summary_writer.py` | Dump `SummaryResult` as JSON. | `write_summary_json()` |
+| `outputs/raw_writer.py` | Snapshot raw fetched records to disk for reproducibility. | `write_raw_records()` |
+| `cli.py` | Click entrypoint; one `run()` command with `--out-dir` and `--log-level`. | `run()` |
+
 ### Sources
 
-Both sources are public ArcGIS Feature Servers (no auth, CORS-permissive). URLs and descriptions live in [README.md](./README.md#data-sources). Pull strategy:
+Both sources are public ArcGIS Feature Servers (no auth, CORS-permissive). URLs are constants in `sources/dins.py` and `sources/epicla.py`. Pull strategy:
 
-- Use the FeatureServer query API with `f=geojson` and `where=1=1`, paginated via `resultOffset` / `resultRecordCount`.
-- Respect each server's `maxRecordCount`. Page until `exceededTransferLimit` is false.
-- Cache raw responses under `pipeline/.cache/` for the duration of a run; do not commit.
+- FeatureServer query API with `f=json`, `outSR=4326`, `returnGeometry=true`, `where=<source-specific filter>`.
+- Paginated via `resultOffset` / `resultRecordCount` (page size 1000). Page until `exceededTransferLimit` is false.
+- Per-page request timeout 60 s. Up to 3 retries on `httpx.HTTPError` or transient ArcGIS errors (5xx / 504 / 429), with exponential back-off `30 s → 120 s → 480 s` (`tenacity.wait_exponential(multiplier=30, exp_base=4, min=30, max=480)`).
 
-Known quirks to handle defensively:
+Known quirks handled defensively:
 
-- ArcGIS occasionally returns features with `null` geometry — drop and log.
-- DINS damage classifications use multiple distinct strings — normalize to a documented enum in `processing/`.
-- Source field names and types may drift between releases — validate against expected schema (see `pipeline/src/after_eaton/sources/schemas.py`) and fail loudly.
+- ArcGIS occasionally returns features with `null` geometry — dropped at the fetcher with a per-feature warning log.
+- DINS damage classifications use specific strings — normalized via `RAW_TO_DAMAGE` in `processing/normalize.py`.
+- Source field names and types may drift between releases — `sources/schemas.py:validate_*` raises `SchemaError(field=...)` and the run aborts.
 
-### Processing
+### QC gates
 
-The pipeline produces a parcel-level join, then derives all other outputs from it:
+Hard-fail thresholds live as constants at the top of `qc/aggregate.py`:
 
-1. Fetch all DINS-tagged parcels in Altadena.
-2. Fetch all EPIC-LA fire recovery cases in Altadena.
-3. Join cases to parcels by APN
-4. Compute per-parcel fields (see Parcel Analysis in README)
-5. Aggregate to (a) site-wide totals, (b) census tracts, (c) census blocks, (d) Altagether blocks.
+| Constant | Default | Meaning |
+|---|---|---|
+| `DESCRIPTION_PARSE_MIN_RATE` | 0.90 | Of fire-related PermitManagement cases with non-null DESCRIPTION, fraction the parser classifies to a known type or extracts a sqft from. |
+| `SFR_SQFT_EXTRACTION_MIN_RATE` | 0.85 | Of permits whose DESCRIPTION mentions an SFR keyword and a numeric sqft, fraction the parser classifies as `sfr` with a sqft. |
+| `WARNING_RATE_MAX` | 0.05 | Maximum fraction of parcels allowed to raise a `data`-severity per-record warning (`info` warnings excluded). |
+| `MIN_COMPLETED_REBUILDS` | 1 | Sanity check against an empty/stale dataset. |
 
-**TODO: Aggregate boundary definition and source.** Expected at `pipeline/src/after_eaton/processing/*.geojson` unless decided otherwise.
+The candidate-set predicates in `qc/aggregate.py` are deliberately defined with regexes independent of the parser — a parser regression cannot shrink the denominator and silently mask itself.
+
+Per-record warning severities:
+
+- **`data`** — flags a parser/source bug worth fixing. Counts toward `warning_rate`.
+- **`info`** — flags real-world ambiguity (e.g. a destroyed parcel that hasn't filed a permit yet). Surfaced in `qc-report.json` but excluded from the threshold.
 
 ### Outputs
 
@@ -102,20 +155,20 @@ All outputs are written to `data/` locally and uploaded as Release assets in CI:
 
 | File | Format | Contents |
 |---|---|---|
-| `parcels.geojson` | GeoJSON FeatureCollection | One feature per parcel with damage, permit, and rebuild fields |
-| `summary.json` | JSON object | Burn area wide aggregate counts and percentages |
-| `census_tracts.geojson` | GeoJSON FeatureCollection | Aggregate per census tract |
-| `census_blocks.geojson` | GeoJSON FeatureCollection | Aggregate per census block |
-| `altagether_aggregates.geojson` | GeoJSON FeatureCollection | Aggregate per Altagether block |
+| `parcels.geojson` | GeoJSON FeatureCollection | One feature per Altadena parcel; attributes per `ParcelResult`. See METHODOLOGY.md for field-by-field semantics. |
+| `summary.json` | JSON object | Burn-area totals (counts). |
+| `qc-report.json` | JSON object | Pass/fail of every threshold + every per-record warning that fired. |
+| `source-dins.json` | JSON object | Raw fetched DINS records (`{source, fetched_at, record_count, records}`). |
+| `source-epicla.json` | JSON object | Raw fetched EPIC-LA records (same envelope). |
 
 Every output carries a `generated_at` ISO 8601 timestamp:
-- `summary.json`: top-level field
-- `*.geojson`: `metadata.generated_at` on the FeatureCollection
+- `summary.json`, `qc-report.json`, `source-dins.json`, `source-epicla.json`: top-level field
+- `parcels.geojson`: `metadata.generated_at` on the FeatureCollection
 
 ### Schedule
 
 ```yaml
-# .github/workflows/pipeline.yml
+# .github/workflows/pipeline.yml  (TODO: not yet committed)
 on:
   schedule:
     - cron: '0 20 * * 1-5'   # 13:00 PT during PDT, 12:00 PT during PST
@@ -124,17 +177,18 @@ on:
 
 Notes:
 
-- GitHub Actions cron is in UTC. `0 20 * * 1-5` lands on 1PM Pacific during PDT (mid-March through early November). During PST the run shifts to noon PT. We accept the one-hour seasonal drift rather than maintaining two cron entries.
+- GitHub Actions cron is in UTC. `0 20 * * 1-5` lands at 1 PM Pacific during PDT (mid-March through early November). During PST the run shifts to noon PT. We accept the one-hour seasonal drift rather than maintaining two cron entries.
 - `workflow_dispatch` is always allowed and produces a release tagged with the run date.
-- GitHub auto-disables scheduled workflows in repos with no commits for 60 days. Each successful run pushes a release built statically with the latest summary.json, which keeps the schedule alive.
+- GitHub auto-disables scheduled workflows in repos with no commits for 60 days. Each successful run pushes a release, which keeps the schedule alive.
 - Scheduled runs can be delayed several minutes under GitHub load — fine for daily cadence.
 
 ### Failure modes
 
-- **Source unavailable or 5xx:** retry with exponential backoff (3 attempts: 30s / 2m / 8m). If still failing, fail the workflow and do **not** publish a partial release.
-- **Schema drift:** validate fields and types after fetch; fail with a descriptive error naming the offending field.
-- **Empty result:** treat zero rows from EPIC-LA as suspicious. Require at least one row from each source or fail.
-- **Geometry issues:** log and drop individual bad features; fail the run only if more than 1% of features are dropped.
+- **Source unavailable or 5xx:** retry with exponential back-off (3 attempts: 30 s / 120 s / 480 s). If still failing, the fetcher raises `SourceError`, the workflow fails, and **no** partial release is published.
+- **Schema drift:** `validate_dins` / `validate_epicla` raises `SchemaError` naming the offending field. The workflow fails before any processing.
+- **Empty result:** zero rows from either source aborts the run with exit code 2.
+- **QC threshold breach:** the aggregate-threshold check raises `QcFailedError` and the workflow exits with code 3 *after* writing `qc-report.json` (so the failure is auditable). Outputs `summary.json` / `parcels.geojson` are not written and no release is uploaded.
+- **Geometry issues:** individual features with `null` geometry are dropped and logged. There is currently no >1% drop-rate gate (TODO).
 
 ## Release strategy
 
@@ -143,16 +197,16 @@ Each successful pipeline run does two things:
 1. Creates a dated release `data-YYYY-MM-DD` with all five output files attached.
 2. Updates the rolling `data-latest` tag to the same assets via `gh release upload data-latest <files> --clobber`.
 
-The dated releases are the historical record; `data-latest` is the stable URL the frontend depends on. Future releases may allow for loading historical data.
+The dated releases are the historical record; `data-latest` is the stable URL the frontend depends on. Future releases may allow loading historical data.
 
 **Public URLs the frontend depends on (canonical):**
 
 ```
 https://github.com/bloudermilk/after-eaton/releases/download/data-latest/parcels.geojson
 https://github.com/bloudermilk/after-eaton/releases/download/data-latest/summary.json
-https://github.com/bloudermilk/after-eaton/releases/download/data-latest/tract_aggregates.csv
-https://github.com/bloudermilk/after-eaton/releases/download/data-latest/block_aggregates.csv
-https://github.com/bloudermilk/after-eaton/releases/download/data-latest/altagether_aggregates.csv
+https://github.com/bloudermilk/after-eaton/releases/download/data-latest/qc-report.json
+https://github.com/bloudermilk/after-eaton/releases/download/data-latest/source-dins.json
+https://github.com/bloudermilk/after-eaton/releases/download/data-latest/source-epicla.json
 ```
 
 We use the explicit `data-latest` tag rather than `/releases/latest/download/` because `latest` resolves by GitHub's own ordering rules (most recent non-prerelease) and could behave unexpectedly when a dated release and the rolling tag are both updated in the same run.
@@ -161,22 +215,22 @@ Retention: keep all dated releases indefinitely. They are small and provide an a
 
 ## Frontend
 
-Vue 3 + Vite, built as a static SPA. **TODO: higher-level framework (Nuxt static, vanilla Vue + vue-router, etc.) — currently undecided.**
+Vue 3 + Vite, built as a static SPA. **TODO: not yet started.**
 
-### Data loading
+### Data loading (planned)
 
 On app load, fetch the data files from Releases:
 
 - Send `If-None-Match` with cached `ETag` to leverage browser cache and Fastly conditional GETs.
 - Show a loading state while data fetches.
 - Show a stale-data banner if the embedded `generated_at` is more than 96 hours old.
-- On fetch failure, render a clear error state
+- On fetch failure, render a clear error state.
 
 ### Date display
 
-The frontend prominently displays the data's `generated_at` date  as a footer pill, e.g. "Data as of Mon Apr 27, 2026 PDT/PST".
+The frontend prominently displays the data's `generated_at` date as a footer pill, e.g. "Data as of Mon Apr 27, 2026 PDT/PST".
 
-### Build and deploy
+### Build and deploy (planned)
 
 ```yaml
 # .github/workflows/deploy.yml
@@ -195,25 +249,111 @@ The frontend deploy is **independent of the data pipeline**. Data updates do not
 
 ### Prerequisites
 
-- Python 3.11+
-- Node 20+
+- Python 3.11+ (the pipeline targets 3.11 via `requires-python` in `pyproject.toml`)
+- Node 20+ (for the frontend, when it exists)
 - `gh` CLI (only needed for testing release uploads)
+- `uv` recommended for venv/dep management; `pip` works too
 
 ### Pipeline
 
-**TODO: add pipeline usage docs**
+**Install (one-time):**
+
+```bash
+cd pipeline
+uv venv --python 3.11
+uv pip install -e ".[dev]"
+```
+
+This installs the `after-eaton` console script into the venv.
+
+**Run end-to-end against live ArcGIS data:**
+
+```bash
+.venv/bin/after-eaton --out-dir ../data
+```
+
+Flags:
+- `--out-dir DIR` (default `data`) — directory for outputs.
+- `--log-level {DEBUG,INFO,WARNING,ERROR}` (default `INFO`).
+
+Outputs land flat in `--out-dir`: `parcels.geojson`, `summary.json`, `qc-report.json`, `source-dins.json`, `source-epicla.json`. The `data/` directory is gitignored.
+
+Exit codes:
+- `0` — success, all QC thresholds passed.
+- `2` — a source returned zero rows (refused to publish).
+- `3` — one or more QC thresholds failed; `qc-report.json` is still written.
+- non-zero on schema drift, source failure after retries, etc.
+
+**Quality gates** (all run in CI):
+
+```bash
+.venv/bin/ruff format src/ tests/      # auto-format
+.venv/bin/ruff check  src/ tests/      # lint (E, F, I, UP rules)
+.venv/bin/mypy --strict src/           # type check
+.venv/bin/pytest                       # all tests
+.venv/bin/pytest tests/test_foo.py     # one file
+```
+
+**Tuning thresholds:** edit the constants at the top of `pipeline/src/after_eaton/qc/aggregate.py` (`DESCRIPTION_PARSE_MIN_RATE`, etc.). The names are stable for ops review.
 
 ### Frontend
 
-**TODO: add frontend usage docs**
+**TODO: not yet started.**
+
+## Testing
+
+Test layout:
+
+```
+tests/
+├── conftest.py                    # parametrizes qa_fixture from fixtures/qa/*.json
+├── fixtures/
+│   └── qa/                        # one JSON per hand-verified parcel; auto-discovered
+│       ├── 5829015008.json
+│       ├── 5841009012.json
+│       ├── 5842022003.json
+│       └── 5842024014.json
+├── test_aggregate.py              # SummaryResult math (synthetic ParcelResults)
+├── test_description_parser.py     # parser regex/tier/sqft tests on inline strings
+├── test_lfl_resolution.py         # _resolve_lfl precedence + recency rules
+└── test_parcel_analysis.py        # end-to-end on QA fixtures
+```
+
+**Three layers:**
+
+1. **Unit tests** (`test_description_parser.py`, `test_aggregate.py`, `test_lfl_resolution.py`) — fast, in-memory, no fixtures. Cover parser regex edge cases, aggregate counting, and LFL precedence rules.
+2. **QA regression tests** (`test_parcel_analysis.py`) — load every JSON file under `tests/fixtures/qa/` and assert `analyze_parcel()` produces the values listed under `expected`. Each fixture file becomes one parametrized test case automatically — adding a new validated parcel requires only dropping a JSON file, no code change.
+3. **End-to-end smoke** — running `after-eaton` against live ArcGIS produces the canonical outputs. Not yet automated in CI; today it's an interactive check before merge.
+
+**QA fixture format:**
+
+```json
+{
+  "ain": "5841009012",
+  "_note": "optional human-readable note about edge cases or known issues",
+  "dins": { ... raw DINS feature attributes + _geometry ... },
+  "epic_cases": [ { ... raw EPIC-LA case attributes + _geometry ... }, ... ],
+  "expected": {
+    "pre_sfr_sqft": 1136,
+    "post_sfr_sqft": 1115,
+    "adds_sb9": true,
+    "added_adu_count": 2,
+    "rebuild_progress_num": 4,
+    "lfl_claimed": null,
+    "sfr_size_comparison": "smaller"
+  }
+}
+```
+
+Fixtures are sourced from real live records (originally fetched at plan-writing time). They are stable inputs — when the live API changes, the fixture continues to encode the historical state we hand-verified, not whatever ArcGIS is serving today.
 
 ## Conventions
 
-- **Python:** formatted with `ruff format`, linted with `ruff check`. Type-checked with `mypy --strict` on `pipeline/src/`.
+- **Python:** formatted with `ruff format`, linted with `ruff check` (rules E, F, I, UP). Type-checked with `mypy --strict` on `pipeline/src/`.
 - **JS/TS:** formatted with `prettier`, linted with `eslint`. TypeScript `strict` mode.
 - **Commits:** conventional-commits-ish, not enforced. Prefixes: `feat:`, `fix:`, `chore:`, `data:`, `docs:`.
 - **Branching:** trunk-based on `main`; PRs squash-merged.
-- **Naming:** `snake_case` in Python, `camelCase` in TS, `kebab-case` for filenames in `web/`.
+- **Naming:** `snake_case` in Python, `camelCase` in TS, `kebab-case` for filenames in `web/` and for top-level output files (e.g. `qc-report.json`).
 
 ## Secrets and configuration
 
@@ -228,6 +368,7 @@ The frontend deploy is **independent of the data pipeline**. Data updates do not
 - GitHub Pages bandwidth soft cap: ~100 GB/month.
 - Releases asset downloads are CDN-backed but not rate-limit-documented; we expect this site to remain well under any practical limit.
 - No alerting on pipeline failure beyond GitHub's default notification to the workflow author. **TODO: add a webhook (Slack/Discord/email list) once the project has more contributors.**
+- No `>1%` dropped-feature gate at the fetch layer (one is described in earlier plans but not yet implemented). Bad geometries are dropped silently except for an INFO log line.
 
 ### Manual operations
 
@@ -246,7 +387,8 @@ gh workflow run deploy.yml
 ### Monitoring
 
 - Watch the Actions tab for failed runs.
-- The frontend's stale-data banner is the user-visible signal that the pipeline has stopped producing fresh output.
+- The frontend's stale-data banner (when implemented) is the user-visible signal that the pipeline has stopped producing fresh output.
+- `qc-report.json` is the audit log: every run captures both the threshold pass/fail state and the full list of per-record warnings, including conflicts the resolver had to break.
 
 ## Out of scope / non-goals
 
@@ -256,3 +398,11 @@ gh workflow run deploy.yml
 - **No runtime database.** All data lives in Release assets; the frontend treats them as the single source of truth.
 - **No real-time data.** Daily-cadence updates are the contract.
 - **No write paths.** No submissions, comments, or any user input beyond client-side filtering.
+
+## Future work (not yet implemented)
+
+- `.github/workflows/pipeline.yml` and `deploy.yml` (CI is currently local-only).
+- Frontend (`web/`) — Vue 3 + Vite SPA.
+- Census-tract / census-block / Altagether aggregates. Boundary source for these is undecided. The current `summary.json` is burn-area-wide only.
+- Pipeline-failure webhook alerting.
+- Geometry drop-rate gate.

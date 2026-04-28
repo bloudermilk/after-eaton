@@ -1,0 +1,520 @@
+{
+  "ain": "5842022003",
+  "dins": {
+    "OBJECTID": 118059,
+    "AIN_1": "5842022003",
+    "APN_1": "5842-022-003",
+    "SitusHouseNo": "3245",
+    "SitusFraction": " ",
+    "SitusDirection": " ",
+    "SitusUnit": " ",
+    "SitusStreet": "ARROWHEAD CT",
+    "SitusAddress": "3245 ARROWHEAD CT",
+    "SitusCity": "ALTADENA CA",
+    "SitusZIP": "91001-1411",
+    "SitusFullAddress": "3245 ARROWHEAD CT ALTADENA CA 91001",
+    "TaxRateArea": "07688",
+    "TaxRateCity": "unincorporated",
+    "AgencyClassNo": 0,
+    "AgencyName": null,
+    "AgencyType": null,
+    "UseCode": "0100",
+    "UseCode_2": "01",
+    "UseType": "Residential",
+    "UseDescription": "Single",
+    "DesignType1": "0130",
+    "YearBuilt1": "1950",
+    "EffectiveYear1": "1968",
+    "Units1": 1,
+    "Bedrooms1": 3,
+    "Bathrooms1": 3,
+    "SQFTmain1": 2012,
+    "DesignType2": null,
+    "YearBuilt2": null,
+    "EffectiveYear2": null,
+    "Units2": null,
+    "Bedrooms2": null,
+    "Bathrooms2": null,
+    "SQFTmain2": null,
+    "DesignType3": null,
+    "YearBuilt3": null,
+    "EffectiveYear3": null,
+    "Units3": null,
+    "Bedrooms3": null,
+    "Bathrooms3": null,
+    "SQFTmain3": null,
+    "DesignType4": null,
+    "YearBuilt4": null,
+    "EffectiveYear4": null,
+    "Units4": null,
+    "Bedrooms4": null,
+    "Bathrooms4": null,
+    "SQFTmain4": null,
+    "DesignType5": null,
+    "YearBuilt5": null,
+    "EffectiveYear5": null,
+    "Units5": null,
+    "Bedrooms5": null,
+    "Bathrooms5": null,
+    "SQFTmain5": null,
+    "RecDate": "20230104",
+    "RecDocNo": 3069,
+    "Roll_Year": "2024",
+    "Roll_LandValue": 956046,
+    "Roll_ImpValue": 492354,
+    "Roll_PersPropValue": 0,
+    "Roll_FixtureValue": 0,
+    "Roll_HomeOwnersExemp": 0,
+    "Roll_RealEstateExemp": 0,
+    "Roll_PersPropExemp": 0,
+    "Roll_FixtureExemp": 0,
+    "Roll_LandBaseYear": "2023",
+    "Roll_ImpBaseYear": "2023",
+    "LastSaleDate": "20230104",
+    "LastSaleAmount": 1420014,
+    "QualityClass1": "D65D ",
+    "QualityClass2": null,
+    "QualityClass3": null,
+    "QualityClass4": null,
+    "QualityClass5": null,
+    "LegalDescLine1": "TRACT # 13323 LOT    3",
+    "LegalDescLine2": null,
+    "LegalDescLine3": null,
+    "LegalDescLine4": null,
+    "LegalDescLine5": null,
+    "LegalDescLineLast": null,
+    "LegalDescription": "TRACT # 13323 LOT    3",
+    "SpatialChangeDate": null,
+    "ParcelCreateDate": 0,
+    "ParcelTypeCode": 0,
+    "Assr_Map": "5842-022",
+    "Assr_Index_Map": "5842-NDX",
+    "CENTER_LAT": 34.20203332,
+    "CENTER_LON": -118.13229612,
+    "CENTER_X": 6521664.31794193,
+    "CENTER_Y": 1895932.22074975,
+    "LAT_LON": "34.202033, -118.132296",
+    "Fire_Name": "Eaton",
+    "DAMAGE_1": "Destroyed (>50%)",
+    "STRUCTURECATEGORY": "Single Residence",
+    "Total_Units": 1,
+    "GlobalID": "cf4527fa-0b6b-4041-8c20-33879a392a5e",
+    "Shape__Area": 7481.6923828125,
+    "Shape__Length": 371.2747612825373,
+    "Tot_SqFt": 2012,
+    "DINS_Count": 2,
+    "LCITY": "UA EATON",
+    "COMMUNITY": "Altadena",
+    "BSD_Tag": "Red",
+    "TT_Eligible": "Eligible from DINS",
+    "Debris_Cleared": "NA",
+    "ROE_Number": "TT-LAC01612",
+    "FSO_URL": "https://pwgis.blob.core.windows.net/epd/Debris_Removal/5842-022-003_FSO.pdf",
+    "ROE_Status": "Final Sign Off - Complete",
+    "Permit_Status": "NA",
+    "elibility_calc": "Eligible Parcels",
+    "_geometry": {
+      "rings": [
+        [
+          [
+            -118.132196569952,
+            34.2020759122834
+          ],
+          [
+            -118.132110377336,
+            34.2019886786799
+          ],
+          [
+            -118.132112194946,
+            34.2019874127479
+          ],
+          [
+            -118.13211397892,
+            34.2019861468526
+          ],
+          [
+            -118.132115729214,
+            34.201984853948
+          ],
+          [
+            -118.132117480506,
+            34.2019835051474
+          ],
+          [
+            -118.132119164526,
+            34.2019821573218
+          ],
+          [
+            -118.132120849587,
+            34.2019807815475
+          ],
+          [
+            -118.132122467332,
+            34.2019793778992
+          ],
+          [
+            -118.132124086118,
+            34.2019779472039
+          ],
+          [
+            -118.132125671269,
+            34.2019765165452
+          ],
+          [
+            -118.13212722274,
+            34.2019750588774
+          ],
+          [
+            -118.132128741572,
+            34.2019735453502
+          ],
+          [
+            -118.132130260405,
+            34.2019720327245
+          ],
+          [
+            -118.132131714092,
+            34.2019704922225
+          ],
+          [
+            -118.132133133014,
+            34.2019689247126
+          ],
+          [
+            -118.132134519384,
+            34.2019673563366
+          ],
+          [
+            -118.132135873162,
+            34.2019657618517
+          ],
+          [
+            -118.132137226893,
+            34.2019641385179
+          ],
+          [
+            -118.13213851331,
+            34.2019624882117
+          ],
+          [
+            -118.132139768261,
+            34.2019608388413
+          ],
+          [
+            -118.132140988446,
+            34.2019591606599
+          ],
+          [
+            -118.132142177166,
+            34.2019574834144
+          ],
+          [
+            -118.132143332206,
+            34.2019557782582
+          ],
+          [
+            -118.132144486118,
+            34.2019540460572
+          ],
+          [
+            -118.13214550874,
+            34.2019523139996
+          ],
+          [
+            -118.132146564954,
+            34.2019505539579
+          ],
+          [
+            -118.132147553896,
+            34.2019487939897
+          ],
+          [
+            -118.132148542752,
+            34.2019469799296
+          ],
+          [
+            -118.132149466547,
+            34.201945192085
+          ],
+          [
+            -118.132150356664,
+            34.2019433781328
+          ],
+          [
+            -118.132151213144,
+            34.2019415633157
+          ],
+          [
+            -118.13215203703,
+            34.2019397214884
+          ],
+          [
+            -118.132153552427,
+            34.2019360379782
+          ],
+          [
+            -118.132154243894,
+            34.201934168348
+          ],
+          [
+            -118.132154902767,
+            34.2019322717075
+          ],
+          [
+            -118.132155528047,
+            34.2019304021495
+          ],
+          [
+            -118.132156087054,
+            34.2019284785721
+          ],
+          [
+            -118.132156647231,
+            34.2019266090852
+          ],
+          [
+            -118.132157140049,
+            34.2019246846786
+          ],
+          [
+            -118.132157599232,
+            34.2019227612102
+          ],
+          [
+            -118.132158026948,
+            34.2019208368746
+          ],
+          [
+            -118.132158353712,
+            34.2019188856034
+          ],
+          [
+            -118.132158747792,
+            34.2019169613046
+          ],
+          [
+            -118.13215904309,
+            34.2019150100677
+          ],
+          [
+            -118.132159303667,
+            34.2019130588688
+          ],
+          [
+            -118.132159499186,
+            34.2019111356884
+          ],
+          [
+            -118.132159694661,
+            34.2019091845606
+          ],
+          [
+            -118.132159823904,
+            34.2019072055577
+          ],
+          [
+            -118.13215992064,
+            34.2019052545377
+          ],
+          [
+            -118.132159950104,
+            34.2019033035913
+          ],
+          [
+            -118.132159979568,
+            34.2019013526448
+          ],
+          [
+            -118.13215994393,
+            34.2018994017695
+          ],
+          [
+            -118.132159874612,
+            34.2018974229835
+          ],
+          [
+            -118.132159603689,
+            34.2018935214509
+          ],
+          [
+            -118.13215940204,
+            34.2018915707569
+          ],
+          [
+            -118.13215916784,
+            34.2018896200984
+          ],
+          [
+            -118.132158900046,
+            34.2018876965226
+          ],
+          [
+            -118.132158566023,
+            34.2018857459733
+          ],
+          [
+            -118.132157372173,
+            34.2018834943501
+          ],
+          [
+            -118.13251453101,
+            34.2019962332605
+          ],
+          [
+            -118.132498064454,
+            34.2020194981882
+          ],
+          [
+            -118.132457837748,
+            34.2020763414297
+          ],
+          [
+            -118.132348517212,
+            34.2022308086813
+          ],
+          [
+            -118.132196569952,
+            34.2020759122834
+          ]
+        ]
+      ]
+    }
+  },
+  "epic_cases": [
+    {
+      "OBJECTID": 1334316,
+      "MODULENAME": "PlanManagement",
+      "CASEID": "e88796a4-dd6e-4661-8f42-f7ef9bf9e16f",
+      "CASENUMBER": "CREC2025000782",
+      "PROJECTID": null,
+      "PROJECTNAME": "",
+      "GISHISTORYQUEUEID": "30fc2b81-311a-46b5-bbb8-4f1acd00388c",
+      "SPATIALTYPE": "Parcel",
+      "SPATIALID": "5842022003",
+      "PROJECT_NUMBER": "PRJ2025-002549",
+      "APPLY_DATE": 1748937600000,
+      "COMPLETE_DATE": null,
+      "EXPIRE_DATE": null,
+      "STATUS": "Open",
+      "DESCRIPTION": "(EATON FIRE LIKE FOR LIKE) New single family home, 2,135 SF. drpdrt",
+      "CSSLink": "plan/e88796a4-dd6e-4661-8f42-f7ef9bf9e16f",
+      "CASENAME": "County Disaster Recovery Permit",
+      "WORKCLASS_NAME": "Rebuild",
+      "USE_CURR": "Vacant",
+      "USE_CURR_ADDL_DETAILS": null,
+      "USE_STATUS1": "Proposed",
+      "USE_PROPOSED1": "Residential - Single-family residences",
+      "USE_PROPOSED1_ADDL": null,
+      "USE_STATUS2": null,
+      "USE_PROPOSED2": null,
+      "USE_PROPOSED2_ADDL": null,
+      "USE_STATUS3": null,
+      "USE_PROPOSED3": null,
+      "USE_PROPOSED3_ADDL": null,
+      "GeneralInfoUseAdditionalInfo": null,
+      "AFFORDABLE_HOUSING": null,
+      "STYLE_CATEGORY": "Rebuild Applications Received, Zoning Reviews Cleared",
+      "MAIN_ADDRESS": " 3245 Arrowhead Court, Altadena CA 91001",
+      "MAIN_AIN": "5842022003",
+      "LAST_INSPECTION_DATE": null,
+      "ISSUANCE_DATE": null,
+      "PERMIT_VALUATION": null,
+      "DISTRICT_DISPLAY": "SD-5",
+      "PROJECT_NAME": "Like-for-Like SFR Rebuild @ 3245 Arrowhead Ct",
+      "ACCESSORY_DWELLING_UNIT": null,
+      "SUP_DIST": "5",
+      "NEW_DWELLING_UNITS": null,
+      "JUNIOR_ADU": null,
+      "STAT_CLASS": null,
+      "DISASTER_LOSS": null,
+      "DISASTER_TYPE": "Eaton Fire (01-2025)",
+      "REBUILD_PROGRESS_NUM": 2,
+      "REBUILD_PROGRESS": "Zoning Reviews Cleared",
+      "REBUILD_APP_RECEIVED": "Rebuild Applications Received",
+      "ZONING_REV_CLEARED": "Zoning Reviews Cleared",
+      "BUILD_PLAN_REV_PROC": null,
+      "BUILD_PLAN_APPROVED": null,
+      "BUILD_PERMIT_ISSUED": null,
+      "REBUILD_IN_CONS": null,
+      "CONS_COMPLETED": null,
+      "STRUCT_TYPE_DISP": null,
+      "MAIN_PARTIAL_ADDR": " 3245 Arrowhead Court",
+      "_geometry": {
+        "x": -118.13230830094189,
+        "y": 34.2020382016874
+      }
+    },
+    {
+      "OBJECTID": 1349936,
+      "MODULENAME": "PermitManagement",
+      "CASEID": "3529486a-fe72-41e3-b85f-9056d48e522c",
+      "CASENUMBER": "UNC-BLDR250729009231",
+      "PROJECTID": "3d864f42-3859-4c8c-820e-1bfb33144385",
+      "PROJECTNAME": "Like-for-Like SFR Rebuild @ 3245 Arrowhead Ct",
+      "GISHISTORYQUEUEID": "2970a7f7-2dad-4cef-a383-c1212ee3f379",
+      "SPATIALTYPE": "Parcel",
+      "SPATIALID": "5842022003",
+      "PROJECT_NUMBER": "PRJ2025-002549",
+      "APPLY_DATE": 1753776000000,
+      "COMPLETE_DATE": null,
+      "EXPIRE_DATE": 1787644800000,
+      "STATUS": "Issued",
+      "DESCRIPTION": "EATON FIRE REBUILD - (N) 2,140 SF SFD (4 BED, 3 BATH, 1 POWDER) WITH 413 SF ATTACHED GARAGE, 40 SF COVERED FRONT PORCH, AND 68 SF COVERED PATIO",
+      "CSSLink": "permit/3529486a-fe72-41e3-b85f-9056d48e522c",
+      "CASENAME": "Unincorporated Building Residential",
+      "WORKCLASS_NAME": "New",
+      "USE_CURR": null,
+      "USE_CURR_ADDL_DETAILS": null,
+      "USE_STATUS1": null,
+      "USE_PROPOSED1": null,
+      "USE_PROPOSED1_ADDL": null,
+      "USE_STATUS2": null,
+      "USE_PROPOSED2": null,
+      "USE_PROPOSED2_ADDL": null,
+      "USE_STATUS3": null,
+      "USE_PROPOSED3": null,
+      "USE_PROPOSED3_ADDL": null,
+      "GeneralInfoUseAdditionalInfo": null,
+      "AFFORDABLE_HOUSING": null,
+      "STYLE_CATEGORY": "Full Building Plans Received, Building Plans Approved, Building Permits Issued, Rebuild In Construction",
+      "MAIN_ADDRESS": " 3245 Arrowhead Court, Altadena CA 91001",
+      "MAIN_AIN": "5842022003",
+      "LAST_INSPECTION_DATE": 1776067200000,
+      "ISSUANCE_DATE": 1756108800000,
+      "PERMIT_VALUATION": 445000,
+      "DISTRICT_DISPLAY": "SD-5",
+      "PROJECT_NAME": "Like-for-Like SFR Rebuild @ 3245 Arrowhead Ct",
+      "ACCESSORY_DWELLING_UNIT": null,
+      "SUP_DIST": "5",
+      "NEW_DWELLING_UNITS": 1,
+      "JUNIOR_ADU": null,
+      "STAT_CLASS": "New SFR not a tract",
+      "DISASTER_LOSS": "1",
+      "DISASTER_TYPE": "Eaton Fire (01-2025)",
+      "REBUILD_PROGRESS_NUM": 6,
+      "REBUILD_PROGRESS": "Rebuild In Construction",
+      "REBUILD_APP_RECEIVED": null,
+      "ZONING_REV_CLEARED": null,
+      "BUILD_PLAN_REV_PROC": "Full Building Plans Received",
+      "BUILD_PLAN_APPROVED": "Building Plans Approved",
+      "BUILD_PERMIT_ISSUED": "Building Permits Issued",
+      "REBUILD_IN_CONS": "Rebuild In Construction",
+      "CONS_COMPLETED": null,
+      "STRUCT_TYPE_DISP": "SFR - Single Family Residence",
+      "MAIN_PARTIAL_ADDR": " 3245 Arrowhead Court",
+      "_geometry": {
+        "x": -118.13230830094189,
+        "y": 34.2020382016874
+      }
+    }
+  ],
+  "expected": {
+    "pre_sfr_sqft": 2012,
+    "adds_sb9": false,
+    "post_sfr_sqft": 2140,
+    "added_adu_count": 0,
+    "rebuild_progress_num": 6,
+    "lfl_claimed": true,
+    "sfr_size_comparison": "larger"
+  }
+}

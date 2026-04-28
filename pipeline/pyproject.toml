@@ -1,0 +1,35 @@
+[project]
+name = "after-eaton"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "tenacity>=9.0",
+    "shapely>=2.0",
+    "click>=8.1",
+]
+
+[project.scripts]
+after-eaton = "after_eaton.cli:run"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-httpx>=0.32", "ruff>=0.4", "mypy>=1.10"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/after_eaton"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+strict = true
+mypy_path = "src"
+packages = ["after_eaton"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
