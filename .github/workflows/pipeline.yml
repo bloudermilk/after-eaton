@@ -1,0 +1,67 @@
+name: pipeline
+
+on:
+  schedule:
+    # 20:00 UTC = 13:00 PT during PDT, 12:00 PT during PST.
+    - cron: '0 20 * * 1-5'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pipeline
+        working-directory: pipeline
+        run: pip install -e .
+
+      - name: Run pipeline
+        working-directory: pipeline
+        run: after-eaton --out-dir ../data --log-level INFO
+
+      - name: Publish releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="data-$(TZ='America/Los_Angeles' date +%Y-%m-%d)"
+          files=(
+            data/parcels.geojson
+            data/summary.json
+            data/qc-report.json
+            data/source-dins.json
+            data/source-epicla.json
+          )
+
+          gh release view "$tag" >/dev/null 2>&1 \
+            || gh release create "$tag" \
+                --title "$tag" \
+                --notes "Automated data refresh for $tag."
+          gh release upload "$tag" "${files[@]}" --clobber
+
+          gh release view data-latest >/dev/null 2>&1 \
+            || gh release create data-latest \
+                --title "data-latest" \
+                --notes "Rolling pointer to the most recent successful pipeline run."
+          gh release upload data-latest "${files[@]}" --clobber
+
+      - name: Upload pipeline outputs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-outputs
+          path: data/
+          if-no-files-found: ignore

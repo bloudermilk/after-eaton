@@ -45,7 +45,7 @@ The site is fully static. There is no backend, no database, and no user state. T
 .
 ├── .github/
 │   └── workflows/
-│       ├── pipeline.yml          # scheduled data pipeline (TODO: not yet committed)
+│       ├── pipeline.yml          # scheduled data pipeline
 │       └── deploy.yml            # frontend build + Pages deploy (TODO: not yet committed)
 ├── pipeline/                     # Python data processing
 │   ├── pyproject.toml
@@ -168,7 +168,7 @@ Every output carries a `generated_at` ISO 8601 timestamp:
 ### Schedule
 
 ```yaml
-# .github/workflows/pipeline.yml  (TODO: not yet committed)
+# .github/workflows/pipeline.yml
 on:
   schedule:
     - cron: '0 20 * * 1-5'   # 13:00 PT during PDT, 12:00 PT during PST
@@ -190,11 +190,13 @@ Notes:
 - **QC threshold breach:** the aggregate-threshold check raises `QcFailedError` and the workflow exits with code 3 *after* writing `qc-report.json` (so the failure is auditable). Outputs `summary.json` / `parcels.geojson` are not written and no release is uploaded.
 - **Geometry issues:** individual features with `null` geometry are dropped and logged. There is currently no >1% drop-rate gate (TODO).
 
+On any non-zero exit, `pipeline.yml` uploads the `data/` directory as a workflow artifact named `pipeline-outputs` so partial outputs — notably `qc-report.json` and the raw source snapshots — remain downloadable from the failed run. The job also runs under a `pipeline` concurrency group with `cancel-in-progress: false`, so a manual `workflow_dispatch` overlapping the scheduled run will queue rather than race on the same release.
+
 ## Release strategy
 
 Each successful pipeline run does two things:
 
-1. Creates a dated release `data-YYYY-MM-DD` with all five output files attached.
+1. Creates the dated release `data-YYYY-MM-DD` (date in `America/Los_Angeles`) and attaches all five output files. Same-day re-runs update the existing release via `gh release upload <tag> <files> --clobber` rather than failing.
 2. Updates the rolling `data-latest` tag to the same assets via `gh release upload data-latest <files> --clobber`.
 
 The dated releases are the historical record; `data-latest` is the stable URL the frontend depends on. Future releases may allow loading historical data.
@@ -401,7 +403,7 @@ gh workflow run deploy.yml
 
 ## Future work (not yet implemented)
 
-- `.github/workflows/pipeline.yml` and `deploy.yml` (CI is currently local-only).
+- `.github/workflows/deploy.yml` (frontend deploy is currently local-only).
 - Frontend (`web/`) — Vue 3 + Vite SPA.
 - Census-tract / census-block / Altagether aggregates. Boundary source for these is undecided. The current `summary.json` is burn-area-wide only.
 - Pipeline-failure webhook alerting.
