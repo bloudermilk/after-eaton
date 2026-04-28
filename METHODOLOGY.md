@@ -66,6 +66,24 @@ EPIC-LA fields we read:
 | `STAT_CLASS` | EPIC-LA's structure-type tag (e.g. `New SFR not a tract`). We do *not* trust this for classification — many ADU/garage permits carry it incorrectly. |
 | `NEW_DWELLING_UNITS`, `ACCESSORY_DWELLING_UNIT`, `JUNIOR_ADU` | Carried for context and used in QC heuristics. We don't trust them as the primary structure-type signal because they conflate slots. |
 
+### Eaton Fire Perimeter
+
+- **Service:** `services.arcgis.com/RmCCgQtiZLDCtblq/.../Eaton_Fire_Perimeter/FeatureServer/0`
+- **Filter applied:** none — the layer covers only the Eaton Fire.
+- **Persisted as:** `source-fire-perimeter.json`.
+- **Used for:** computing the bounding envelope used to filter the 2020 census tract and block group queries.
+
+### 2020 Census Tracts / Block Groups
+
+- **Services:** `public.gis.lacounty.gov/.../Demographics/MapServer/14` (tracts) and `MapServer/15` (block groups).
+- **Filters applied:**
+  - Tracts: spatial — only polygons whose envelope intersects the fire-perimeter envelope (EPSG:4326).
+  - Block groups: attribute — `CT20 IN (<the CT20 values from the fetched tract set>)`. We do *not* re-apply the perimeter envelope to block groups: filtering by parent tract guarantees the block groups exactly partition the tracts (no orphan block groups whose parent tract was excluded, no stray groups from neighbouring tracts that happened to clip the perimeter envelope).
+- **Persisted as:** `source-2020-census-tracts.json` and `source-2020-census-block-groups.json`.
+- **Used for:** the per-tract / per-block-group rollups in `2020-census-tracts.geojson` and `2020-census-block-groups.geojson`.
+
+Each layer's identifier fields (`CT20`, `BG20`, `LABEL`) flow through to the per-feature `properties`.
+
 ### What we explicitly do *not* use
 
 - **`STAT_CLASS` for SFR/ADU classification.** It is set by intake on a permit-type basis and routinely mislabels ADU and garage permits. We classify from `DESCRIPTION` text instead.
@@ -299,6 +317,27 @@ See [Like-for-Like vs Custom](#like-for-like-vs-custom-lfl-claim).
 
 ---
 
+## Geographic aggregations
+
+The same parcel-level counts that roll up into `summary.json` also roll up per 2020 census tract and per 2020 census block group, and ship as `2020-census-tracts.geojson` / `2020-census-block-groups.geojson`.
+
+**Boundary sources:** LA County's *2020 Census Tracts* (Demographics MapServer layer 14) and *2020 Census Block Groups* (layer 15). Tracts are fetched by spatial intersection with the Eaton Fire perimeter envelope (LA County's *Eaton Fire Perimeter* FeatureServer). Block groups are then fetched by `CT20 IN (...)` over the fetched tract set, so each tract's block groups perfectly partition that tract. The full perimeter polygon ships as `source-fire-perimeter.json` alongside the raw tract / block-group polygons.
+
+**Assignment rule:** each Altadena DINS parcel is assigned to **exactly one** tract and **exactly one** block group by **polygon-centroid containment**. We compute the parcel polygon's centroid (shapely 2.x), then pick the tract/block-group polygon that contains it via an STRtree spatial index. Centroids landing exactly on a shared boundary are awarded to the nearest candidate (deterministic tiebreaker). Centroids that fall outside every fetched tract are not counted into any region and emit a `parcel_outside_census_tracts` per-record warning (severity `data`).
+
+**Sum invariants** (enforced as hard-fail QC thresholds in `qc/aggregate.py`; see [Aggregate thresholds](#aggregate-thresholds-gate-the-run)):
+
+- `tract_total_matches_summary` — `sum(tract.total_parcels) + len(unassigned_ains)` equals the burn-area total.
+- `tract_partitions_into_block_groups` — every tract's `total_parcels` equals the sum of its block-groups' `total_parcels`. We fetch block groups via `CT20 IN (<tract ids>)` precisely so this invariant holds by construction; a violation flags drift between the two LA County census layers.
+
+A failure of either invariant aborts the run with exit code 3 and **no release is published**.
+
+**Per-feature contract:** each tract/block-group `Feature` carries identifier fields (`ct20` + `label` for tracts; `bg20` + `ct20` + `label` for block groups) plus every numeric count from `summary.json` — `total_parcels`, `damaged_parcels`, `destroyed_parcels`, the `bsd_*_count` set, the rebuild-progress set, the LFL set, the SFR-size set, `sb9_count`, and `added_adu_count`. A tract/block-group that intersects the perimeter envelope but contains zero Altadena parcels still ships as a feature with all counts = 0, so the geographic frame is stable regardless of source drift.
+
+Source: `pipeline/src/after_eaton/processing/spatial_aggregate.py:aggregate_by_region`.
+
+---
+
 ## Quality controls
 
 Every run produces a `qc-report.json` documenting both gate-level pass/fail and per-parcel warnings.
@@ -313,6 +352,8 @@ If any threshold fails, the run aborts with exit code 3 and **no release is publ
 | `sfr_sqft_extraction_rate` | ≥ 85% | Of permits whose `DESCRIPTION` mentions an SFR keyword and a numeric sqft, fraction the parser classified as `sfr` with a sqft. (Includes false-positive candidates where SFR is used as a descriptor, e.g. `"ADU 800 SF SFD"`; the parser correctly classifies those as ADU and they count as misses here.) |
 | `warning_rate` | ≤ 5% | Fraction of parcels that raised at least one **`data`-severity** per-record warning. `info`-severity warnings (real-world ambiguity) are excluded. |
 | `min_completed_rebuilds` | ≥ 1 | Sanity check against an empty/stale dataset — at least one parcel has reached `Construction Completed`. |
+| `tract_total_matches_summary` | exact equality | `sum(tract.total_parcels) + len(unassigned)` must equal the burn-area `total_parcels`. Catches a parcel being double-counted across tracts or silently dropped during the centroid pass. |
+| `tract_partitions_into_block_groups` | exact equality | For every tract, `tract.total_parcels` must equal the sum of its block-groups' `total_parcels`. Catches drift between the two LA County census layers, or a parcel whose centroid lands in a tract but in none of that tract's block-group polygons. |
 
 The candidate-set predicates are deliberately defined with regexes independent from the parser, so a parser regression cannot shrink the denominator and silently mask itself.
 
@@ -327,6 +368,7 @@ Every `ParcelResult` is checked against five conditions. Each emits a warning wi
 | `permit_all_unknown_structures` | `data` | A permit reports `NEW_DWELLING_UNITS > 0` but the parser classified every segment as `unknown`. Indicates the parser is missing a description pattern. |
 | `size_compared_without_lfl_signal` | `info` | We have both pre and post SFR sqft (so `sfr_size_comparison` is non-null) but no source stated LFL or Custom. Real-world ambiguity. |
 | `lfl_conflict` | `data` | The parcel's cases produced two or more distinct LFL/Custom signals; the most-recent case won, but the disagreement is flagged. |
+| `parcel_outside_census_tracts` | `data` | The parcel's polygon centroid did not fall inside any fetched 2020 census tract — likely a corrupt parcel polygon or perimeter/tract boundary drift. The parcel still appears in `parcels.geojson` and `summary.json` but is not counted into any per-tract / per-block-group total. |
 
 Severity controls only whether the warning counts toward `warning_rate`. All warnings are written to `qc-report.json` regardless.
 
@@ -419,6 +461,25 @@ Burn-area-wide aggregate counts.
 | `sb9_count` | `int` | Parcels with `adds_sb9 = true`. |
 | `added_adu_count` | `int` | Parcels with `added_adu_count > 0` (note: name reused, slightly misleading — this is a *count of parcels*, not an aggregate ADU count). |
 
+### `2020-census-tracts.geojson` / `2020-census-block-groups.geojson`
+
+GeoJSON `FeatureCollection`. One `Feature` per 2020 census tract / block group intersecting the Eaton Fire perimeter envelope. Geometry is a GeoJSON `Polygon` or `MultiPolygon` in EPSG:4326.
+
+```json
+{
+  "type": "FeatureCollection",
+  "metadata": { "generated_at": "2026-04-27T23:34:02+00:00" },
+  "features": [ { "type": "Feature", "properties": { ... }, "geometry": { ... } }, ... ]
+}
+```
+
+`properties` carries:
+
+- **Identifiers:** `ct20` (string), `label` (string) for tracts; `bg20` (string), `ct20` (string), `label` (string) for block groups.
+- **Counts:** every numeric field listed in [`summary.json`](#summaryjson) below — `total_parcels`, `damaged_parcels`, `destroyed_parcels`, `bsd_red_count`, `bsd_yellow_count`, `bsd_green_count`, `bsd_red_or_yellow_count`, `no_permit_count`, `permit_in_review_count`, `permit_issued_count`, `construction_count`, `completed_count`, `lfl_count`, `nlfl_count`, `lfl_unknown_count`, `sfr_larger_count`, `sfr_identical_count`, `sfr_smaller_count`, `sb9_count`, `added_adu_count`.
+
+See [Geographic aggregations](#geographic-aggregations) for the assignment rule.
+
 ### `qc-report.json`
 
 ```json
@@ -476,7 +537,7 @@ We document these openly because the pipeline is meant to be auditable, not just
 
 5. **No commercial/non-residential coverage.** DINS slots `06xx`+ and EPIC-LA permits without a residential keyword are excluded from analysis. The Recovery Map's "Units" total includes commercial structures; ours does not.
 
-6. **Aggregate boundaries other than burn-area-wide are not yet implemented.** Census-tract / census-block / Altagether-zone aggregates are planned but absent from `summary.json` today.
+6. **Altagether-zone aggregates are not yet implemented.** Census-tract and census-block-group aggregates ship as `2020-census-tracts.geojson` / `2020-census-block-groups.geojson` (see [Geographic aggregations](#geographic-aggregations)); Altagether-zone boundaries remain undecided.
 
 7. **Recovery Map vs our numbers will disagree by a small amount.** Both sources refresh on independent cadences; expect 5–20 parcel drift between any two snapshots. Larger disagreements indicate a methodological difference and should be investigated rather than reconciled cosmetically.
 

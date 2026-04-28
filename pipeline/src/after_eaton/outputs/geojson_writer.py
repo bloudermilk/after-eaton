@@ -28,7 +28,7 @@ def write_parcels_geojson(
 
 def _to_feature(result: ParcelResult, parcel: DinsParcel) -> dict[str, Any]:
     raw_geom = parcel.get("_geometry")
-    geometry = _esri_to_geojson(raw_geom)
+    geometry = esri_to_geojson(raw_geom)
     properties = asdict(result)
     properties["damage"] = result.damage.value
     properties["bsd_status"] = result.bsd_status.value
@@ -39,7 +39,11 @@ def _to_feature(result: ParcelResult, parcel: DinsParcel) -> dict[str, Any]:
     }
 
 
-def _esri_to_geojson(geom: dict[str, Any] | None) -> dict[str, Any] | None:
+def esri_to_geojson(geom: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Convert an Esri ArcGIS geometry dict to a GeoJSON geometry.
+
+    Public so the per-region GeoJSON writer can reuse the same conversion.
+    """
     if not geom:
         return None
     rings = geom.get("rings")

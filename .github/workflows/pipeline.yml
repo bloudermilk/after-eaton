@@ -42,8 +42,13 @@ jobs:
             data/parcels.geojson
             data/summary.json
             data/qc-report.json
+            data/2020-census-tracts.geojson
+            data/2020-census-block-groups.geojson
             data/source-dins.json
             data/source-epicla.json
+            data/source-fire-perimeter.json
+            data/source-2020-census-tracts.json
+            data/source-2020-census-block-groups.json
           )
 
           gh release view "$tag" >/dev/null 2>&1 \

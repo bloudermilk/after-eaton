@@ -10,4 +10,7 @@ from ..processing.aggregate import SummaryResult
 
 
 def write_summary_json(summary: SummaryResult, out_path: Path) -> None:
-    out_path.write_text(json.dumps(asdict(summary), indent=2))
+    """Write `summary.json` with `generated_at` first for diff-friendliness."""
+    flat = asdict(summary)
+    payload = {"generated_at": flat.pop("generated_at"), **flat}
+    out_path.write_text(json.dumps(payload, indent=2))

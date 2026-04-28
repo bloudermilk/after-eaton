@@ -53,6 +53,31 @@ class DinsParcel(TypedDict, total=False):
     _geometry: NotRequired[dict[str, Any] | None]
 
 
+class FirePerimeter(TypedDict, total=False):
+    """Eaton Fire Perimeter polygon."""
+
+    OBJECTID: int
+    type: NotRequired[str | None]
+    _geometry: NotRequired[dict[str, Any] | None]
+
+
+class CensusTract(TypedDict, total=False):
+    """A single 2020 census tract polygon (LA County Demographics layer 14)."""
+
+    CT20: str
+    LABEL: NotRequired[str | None]
+    _geometry: NotRequired[dict[str, Any] | None]
+
+
+class CensusBlockGroup(TypedDict, total=False):
+    """A single 2020 census block group polygon (LA County Demographics layer 15)."""
+
+    BG20: str
+    CT20: NotRequired[str | None]
+    LABEL: NotRequired[str | None]
+    _geometry: NotRequired[dict[str, Any] | None]
+
+
 class EpicCase(TypedDict, total=False):
     """A single EPIC-LA fire recovery case."""
 
@@ -105,6 +130,14 @@ _EPIC_REQUIRED: dict[str, tuple[type, ...]] = {
     "DESCRIPTION": (str, type(None)),
 }
 
+_TRACT_REQUIRED: dict[str, tuple[type, ...]] = {
+    "CT20": (str,),
+}
+
+_BG_REQUIRED: dict[str, tuple[type, ...]] = {
+    "BG20": (str,),
+}
+
 
 def _check_required(
     record: dict[str, Any],
@@ -146,6 +179,52 @@ def validate_epicla(records: list[dict[str, Any]]) -> list[EpicCase]:
         if not ain or not isinstance(ain, str):
             raise SchemaError(
                 "EPIC-LA: MAIN_AIN must be a non-empty string", field="MAIN_AIN"
+            )
+        out.append(raw)  # type: ignore[arg-type]
+    return out
+
+
+def validate_fire_perimeter(records: list[dict[str, Any]]) -> list[FirePerimeter]:
+    """Validate raw fire-perimeter records.
+
+    The fire-perimeter layer carries no required attribute fields beyond
+    what ArcGIS auto-generates, so we only confirm geometry is present.
+    """
+    out: list[FirePerimeter] = []
+    for raw in records:
+        if not raw.get("_geometry"):
+            raise SchemaError(
+                "fire-perimeter: record missing geometry", field="_geometry"
+            )
+        out.append(raw)  # type: ignore[arg-type]
+    return out
+
+
+def validate_census_tracts(records: list[dict[str, Any]]) -> list[CensusTract]:
+    """Validate raw census-tract feature dicts and narrow them to CensusTract."""
+    out: list[CensusTract] = []
+    for raw in records:
+        _check_required(raw, _TRACT_REQUIRED, label="census-tracts")
+        ct = raw["CT20"]
+        if not ct or not isinstance(ct, str):
+            raise SchemaError(
+                "census-tracts: CT20 must be a non-empty string", field="CT20"
+            )
+        out.append(raw)  # type: ignore[arg-type]
+    return out
+
+
+def validate_census_block_groups(
+    records: list[dict[str, Any]],
+) -> list[CensusBlockGroup]:
+    """Validate raw census-block-group feature dicts."""
+    out: list[CensusBlockGroup] = []
+    for raw in records:
+        _check_required(raw, _BG_REQUIRED, label="census-block-groups")
+        bg = raw["BG20"]
+        if not bg or not isinstance(bg, str):
+            raise SchemaError(
+                "census-block-groups: BG20 must be a non-empty string", field="BG20"
             )
         out.append(raw)  # type: ignore[arg-type]
     return out

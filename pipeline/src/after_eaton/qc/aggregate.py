@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 from dataclasses import dataclass
 
 from ..processing.description_parser import parse_description
 from ..processing.join import JoinedParcel
 from ..processing.parcel_analysis import ParcelResult
+from ..processing.spatial_aggregate import SpatialAggregation
 from .per_record import RecordWarning
 
 # Tunable thresholds — keep names stable for ops review. These are the
@@ -37,13 +39,25 @@ def check_thresholds(
     joined: list[JoinedParcel],
     results: list[ParcelResult],
     warnings: list[RecordWarning],
+    *,
+    tract_aggregation: SpatialAggregation | None = None,
+    block_group_aggregation: SpatialAggregation | None = None,
 ) -> list[ThresholdCheck]:
-    return [
+    checks = [
         _description_parse_rate(joined),
         _sfr_sqft_extraction_rate(joined),
         _warning_rate(results, warnings),
         _completed_rebuild_count(results),
     ]
+    if tract_aggregation is not None:
+        checks.append(_tract_total_matches_summary(results, tract_aggregation))
+    if tract_aggregation is not None and block_group_aggregation is not None:
+        checks.append(
+            _tract_partitions_into_block_groups(
+                tract_aggregation, block_group_aggregation
+            )
+        )
+    return checks
 
 
 def _description_parse_rate(joined: list[JoinedParcel]) -> ThresholdCheck:
@@ -152,6 +166,67 @@ def _completed_rebuild_count(results: list[ParcelResult]) -> ThresholdCheck:
         threshold=float(MIN_COMPLETED_REBUILDS),
         passed=completed >= MIN_COMPLETED_REBUILDS,
         detail=f"{completed} parcels reported Construction Completed",
+    )
+
+
+def _tract_total_matches_summary(
+    results: list[ParcelResult],
+    tracts: SpatialAggregation,
+) -> ThresholdCheck:
+    """Sum of `total_parcels` across tracts (plus unassigned parcels) must
+    equal the burn-area total. Centroid assignment is 1:1 by construction,
+    so any drift is a coding bug or source breakage.
+    """
+    burn_total = len(results)
+    tract_total = sum(f.counts.total_parcels for f in tracts.features)
+    unassigned = len(tracts.unassigned_ains)
+    diff = burn_total - (tract_total + unassigned)
+    return ThresholdCheck(
+        name="tract_total_matches_summary",
+        actual=float(diff),
+        threshold=0.0,
+        passed=diff == 0,
+        detail=(
+            f"sum(tract.total_parcels)={tract_total} + "
+            f"unassigned={unassigned} vs. burn-area total={burn_total} "
+            f"(diff={diff})"
+        ),
+    )
+
+
+def _tract_partitions_into_block_groups(
+    tracts: SpatialAggregation,
+    block_groups: SpatialAggregation,
+) -> ThresholdCheck:
+    """Every tract's `total_parcels` must equal the sum of its block-groups'
+    `total_parcels`. We fetch block groups by parent CT20 specifically so
+    they exactly partition the tracts; any mismatch flags either source
+    drift between the two layers or a parcel landing in a tract polygon
+    while its centroid lands in a different block group.
+    """
+    bg_totals_by_ct20: dict[str, int] = defaultdict(int)
+    for f in block_groups.features:
+        ct20 = f.identifiers.get("ct20", "")
+        bg_totals_by_ct20[ct20] += f.counts.total_parcels
+
+    mismatches: list[str] = []
+    for f in tracts.features:
+        ct20 = f.identifiers.get("ct20", "")
+        bg_sum = bg_totals_by_ct20.get(ct20, 0)
+        if f.counts.total_parcels != bg_sum:
+            mismatches.append(
+                f"ct20={ct20} tract={f.counts.total_parcels} bg_sum={bg_sum}"
+            )
+
+    return ThresholdCheck(
+        name="tract_partitions_into_block_groups",
+        actual=float(len(mismatches)),
+        threshold=0.0,
+        passed=not mismatches,
+        detail=(
+            f"{len(mismatches)} tract(s) disagree with their block-groups"
+            + (": " + "; ".join(mismatches[:3]) if mismatches else "")
+        ),
     )
 
 

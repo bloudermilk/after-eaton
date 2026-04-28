@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass
 
 from .normalize import BsdStatus, DamageLevel
 from .parcel_analysis import ParcelResult
 
 
 @dataclass(frozen=True)
-class SummaryResult:
-    generated_at: str
+class RegionCounts:
+    """Per-region counting fields. Shared by the burn-area summary and the
+    per-tract / per-block-group aggregations so a single source-of-truth set
+    of predicates governs every count we publish.
+    """
+
     total_parcels: int
     # DINS DAMAGE_1 (FIRESCOPE %-loss) buckets
     damaged_parcels: int
@@ -36,6 +41,13 @@ class SummaryResult:
     added_adu_count: int
 
 
+@dataclass(frozen=True, kw_only=True)
+class SummaryResult(RegionCounts):
+    """Burn-area-wide totals carrying the run's `generated_at` timestamp."""
+
+    generated_at: str
+
+
 _DAMAGED_LEVELS = {
     DamageLevel.AFFECTED,
     DamageLevel.MINOR,
@@ -44,10 +56,13 @@ _DAMAGED_LEVELS = {
 }
 
 
-def aggregate_burn_area(
-    parcels: list[ParcelResult],
-    generated_at: str,
-) -> SummaryResult:
+def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
+    """Compute every published count field for a parcel set.
+
+    Used both by `aggregate_burn_area` and by per-region (tract / block
+    group) aggregation, so the same predicates govern every publish path.
+    """
+    parcels = list(parcels)
     total = len(parcels)
     damaged = sum(1 for p in parcels if p.damage in _DAMAGED_LEVELS)
     destroyed = sum(1 for p in parcels if p.damage == DamageLevel.DESTROYED)
@@ -78,8 +93,7 @@ def aggregate_burn_area(
     sb9 = sum(1 for p in parcels if p.adds_sb9)
     added_adu = sum(1 for p in parcels if p.added_adu_count > 0)
 
-    return SummaryResult(
-        generated_at=generated_at,
+    return RegionCounts(
         total_parcels=total,
         damaged_parcels=damaged,
         destroyed_parcels=destroyed,
@@ -101,3 +115,11 @@ def aggregate_burn_area(
         sb9_count=sb9,
         added_adu_count=added_adu,
     )
+
+
+def aggregate_burn_area(
+    parcels: list[ParcelResult],
+    generated_at: str,
+) -> SummaryResult:
+    counts = count_parcels(parcels)
+    return SummaryResult(generated_at=generated_at, **asdict(counts))

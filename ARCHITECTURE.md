@@ -24,17 +24,22 @@ For project overview and data source descriptions, see [README.md](./README.md).
 └──────────────┬───────────────┘                        │
                │ gh release upload --clobber            │
                ▼                                        │
-┌──────────────────────────────┐                        │
-│  GitHub Releases             │────────────────────────┘
-│  - data-YYYY-MM-DD (history) │
-│  - data-latest (rolling)     │
-│  Assets:                     │
-│    parcels.geojson           │
-│    summary.json              │
-│    qc-report.json            │
-│    source-dins.json          │
-│    source-epicla.json        │
-└──────────────────────────────┘
+┌────────────────────────────────────────────┐          │
+│  GitHub Releases                           │──────────┘
+│  - data-YYYY-MM-DD (history)               │
+│  - data-latest (rolling)                   │
+│  Assets:                                   │
+│    parcels.geojson                         │
+│    summary.json                            │
+│    qc-report.json                          │
+│    2020-census-tracts.geojson              │
+│    2020-census-block-groups.geojson        │
+│    source-dins.json                        │
+│    source-epicla.json                      │
+│    source-fire-perimeter.json              │
+│    source-2020-census-tracts.json          │
+│    source-2020-census-block-groups.json    │
+└────────────────────────────────────────────┘
 ```
 
 The site is fully static. There is no backend, no database, and no user state. The frontend fetches data files at runtime from the rolling `data-latest` Release tag.
@@ -76,6 +81,8 @@ The pipeline is a single Python package, `after_eaton`, exposing one CLI entrypo
 ```
 fetch DINS                    → sources/dins.py
 fetch EPIC-LA                 → sources/epicla.py
+fetch fire perimeter          → sources/fire_perimeter.py
+fetch census tracts/BGs       → sources/census.py        (perimeter-envelope filter)
    → write raw snapshots to data/
 validate schemas              → sources/schemas.py        (raises SchemaError)
 join cases to parcels by AIN  → processing/join.py
@@ -85,6 +92,8 @@ analyze each parcel           → processing/parcel_analysis.py
    ├─ parse DESCRIPTION       → processing/description_parser.py
    ├─ resolve LFL signals     → processing/parcel_analysis.py:_resolve_lfl
    └─ normalize damage / BSD  → processing/normalize.py
+spatial assignment            → processing/spatial_aggregate.py
+   (parcel centroid → tract / block group; reused for QC + GeoJSON output)
 QC:
    ├─ per-record warnings     → qc/per_record.py          (collected, not fatal)
    └─ aggregate thresholds    → qc/aggregate.py           (raise QcFailedError)
@@ -92,6 +101,7 @@ write qc-report.json
 aggregate to burn-area totals → processing/aggregate.py
 write summary.json
 write parcels.geojson
+write 2020-census-tracts.geojson, 2020-census-block-groups.geojson
 ```
 
 For the analytical contract — what each derived field *means* — see [METHODOLOGY.md](./METHODOLOGY.md). This file describes the *shape* of the code.
@@ -103,16 +113,20 @@ For the analytical contract — what each derived field *means* — see [METHODO
 | `sources/arcgis.py` | Paginated FeatureServer fetcher with retry. Drops null-geometry features. | `fetch_all()`, `SourceError` |
 | `sources/dins.py` | Thin wrapper: pulls `COMMUNITY = 'Altadena'` from the DINS layer. | `fetch_dins_parcels()` |
 | `sources/epicla.py` | Thin wrapper: pulls `DISASTER_TYPE = 'Eaton Fire (01-2025)'` from EPIC-LA layer 0. | `fetch_epicla_cases()` |
-| `sources/schemas.py` | TypedDict definitions and `validate_*` functions. Required-field type checks; raises `SchemaError` (with `field=`) on drift. | `DinsParcel`, `EpicCase`, `validate_dins`, `validate_epicla` |
+| `sources/fire_perimeter.py` | Thin wrapper: pulls every feature from the Eaton Fire Perimeter layer. | `fetch_fire_perimeter()` |
+| `sources/census.py` | Pulls 2020 census tracts (layer 14) intersecting the fire-perimeter envelope, then pulls every block group (layer 15) whose parent CT20 is in that tract set so block groups exactly partition the tracts. | `fetch_census_tracts()`, `fetch_census_block_groups()` |
+| `sources/schemas.py` | TypedDict definitions and `validate_*` functions. Required-field type checks; raises `SchemaError` (with `field=`) on drift. | `DinsParcel`, `EpicCase`, `FirePerimeter`, `CensusTract`, `CensusBlockGroup`, `validate_dins`, `validate_epicla`, `validate_fire_perimeter`, `validate_census_tracts`, `validate_census_block_groups` |
 | `processing/normalize.py` | Damage and BSD enums + raw→canonical maps. Rebuild-progress label table. | `DamageLevel`, `BsdStatus`, `normalize_damage`, `normalize_bsd`, `rebuild_progress_label` |
 | `processing/description_parser.py` | EPIC-LA free-text parser: splits a DESCRIPTION into structures, classifies each as `sfr`/`adu`/`jadu`/`sb9`/`mfr`/`garage`/`temporary_housing`/`repair`/`retaining_wall`/`seismic`/`unknown`, extracts sqft. Also extracts LFL/Custom claim from PROJECT_NAME or DESCRIPTION. | `parse_description()`, `extract_lfl_claim()`, `ParsedStructure`, `RESIDENTIAL_TYPES` |
 | `processing/join.py` | Group cases by `MAIN_AIN`, left-join to DINS parcels. Logs unmatched AINs. | `join_cases_to_parcels()`, `JoinedParcel` |
 | `processing/parcel_analysis.py` | Per-parcel synthesis. Reads DINS structure slots for pre-fire; selects primary permit for post-fire; runs LFL resolution; computes size comparison and SB-9/ADU deltas. | `analyze_parcel()`, `ParcelResult`, `_resolve_lfl()`, `_select_primary_permit()` |
-| `processing/aggregate.py` | Roll `ParcelResult` list into `SummaryResult` (counts only, no per-parcel detail). | `aggregate_burn_area()`, `SummaryResult` |
+| `processing/aggregate.py` | Roll `ParcelResult` list into `SummaryResult` (counts only, no per-parcel detail). The shared `count_parcels()` helper produces the same counting set used by per-tract / per-block-group aggregation. | `aggregate_burn_area()`, `count_parcels()`, `SummaryResult`, `RegionCounts` |
+| `processing/spatial_aggregate.py` | Assign each parcel to one tract and one block group by polygon-centroid containment (shapely STRtree); roll up per-region counts. | `aggregate_by_region()`, `RegionFeature`, `SpatialAggregation` |
 | `qc/per_record.py` | Per-parcel data-quality warnings. Each warning carries a `severity` of `data` (counts toward threshold) or `info` (real-world ambiguity, surfaced but doesn't gate the run). | `check_record()`, `RecordWarning` |
 | `qc/aggregate.py` | Four hard-fail dataset-level checks. Constants at top of file are tunable. | `check_thresholds()`, `ThresholdCheck`, `QcFailedError` |
 | `qc/report.py` | Formats and writes `qc-report.json`; pretty-prints to stdout. | `QcReport`, `print_report`, `write_report`, `enforce` |
-| `outputs/geojson_writer.py` | Per-feature GeoJSON output. Converts ArcGIS rings to GeoJSON Polygon/MultiPolygon. | `write_parcels_geojson()` |
+| `outputs/geojson_writer.py` | Per-feature GeoJSON output. Converts ArcGIS rings to GeoJSON Polygon/MultiPolygon (`esri_to_geojson` is reused by the region writer). | `write_parcels_geojson()`, `esri_to_geojson()` |
+| `outputs/region_writer.py` | FeatureCollection writer for tract / block-group GeoJSONs. | `write_regions_geojson()` |
 | `outputs/summary_writer.py` | Dump `SummaryResult` as JSON. | `write_summary_json()` |
 | `outputs/raw_writer.py` | Snapshot raw fetched records to disk for reproducibility. | `write_raw_records()` |
 | `cli.py` | Click entrypoint; one `run()` command with `--out-dir` and `--log-level`. | `run()` |
@@ -142,6 +156,13 @@ Hard-fail thresholds live as constants at the top of `qc/aggregate.py`:
 | `WARNING_RATE_MAX` | 0.05 | Maximum fraction of parcels allowed to raise a `data`-severity per-record warning (`info` warnings excluded). |
 | `MIN_COMPLETED_REBUILDS` | 1 | Sanity check against an empty/stale dataset. |
 
+In addition, two spatial-aggregation invariants run as hard-fail equality checks (no tunable threshold — they must be 0):
+
+| Threshold | Pass condition | Meaning |
+|---|---|---|
+| `tract_total_matches_summary` | `sum(tract.total_parcels) + len(unassigned_ains) == burn-area total` | Catches double-assignment or dropped parcels in the centroid pass. |
+| `tract_partitions_into_block_groups` | for every tract: `tract.total_parcels == sum(its block-groups' total_parcels)` | Catches drift between the two LA County census layers, or a parcel landing in a tract but not in any of its block groups (boundary mismatch). |
+
 The candidate-set predicates in `qc/aggregate.py` are deliberately defined with regexes independent of the parser — a parser regression cannot shrink the denominator and silently mask itself.
 
 Per-record warning severities:
@@ -158,12 +179,17 @@ All outputs are written to `data/` locally and uploaded as Release assets in CI:
 | `parcels.geojson` | GeoJSON FeatureCollection | One feature per Altadena parcel; attributes per `ParcelResult`. See METHODOLOGY.md for field-by-field semantics. |
 | `summary.json` | JSON object | Burn-area totals (counts). |
 | `qc-report.json` | JSON object | Pass/fail of every threshold + every per-record warning that fired. |
+| `2020-census-tracts.geojson` | GeoJSON FeatureCollection | One feature per 2020 census tract intersecting the perimeter; attributes are identifiers (`ct20`, `label`) plus every `RegionCounts` field. |
+| `2020-census-block-groups.geojson` | GeoJSON FeatureCollection | One feature per 2020 census block group intersecting the perimeter; attributes are identifiers (`bg20`, `ct20`, `label`) plus every `RegionCounts` field. |
 | `source-dins.json` | JSON object | Raw fetched DINS records (`{source, fetched_at, record_count, records}`). |
 | `source-epicla.json` | JSON object | Raw fetched EPIC-LA records (same envelope). |
+| `source-fire-perimeter.json` | JSON object | Raw Eaton Fire perimeter polygon(s) (same envelope). |
+| `source-2020-census-tracts.json` | JSON object | Raw 2020 census tract polygons within the perimeter envelope (same envelope). |
+| `source-2020-census-block-groups.json` | JSON object | Raw 2020 census block group polygons within the perimeter envelope (same envelope). |
 
 Every output carries a `generated_at` ISO 8601 timestamp:
-- `summary.json`, `qc-report.json`, `source-dins.json`, `source-epicla.json`: top-level field
-- `parcels.geojson`: `metadata.generated_at` on the FeatureCollection
+- `summary.json`, `qc-report.json`, `source-dins.json`, `source-epicla.json`, `source-fire-perimeter.json`, `source-2020-census-tracts.json`, `source-2020-census-block-groups.json`: top-level field (`fetched_at` on raw source files)
+- `parcels.geojson`, `2020-census-tracts.geojson`, `2020-census-block-groups.geojson`: `metadata.generated_at` on the FeatureCollection
 
 ### Schedule
 
@@ -207,8 +233,13 @@ The dated releases are the historical record; `data-latest` is the stable URL th
 https://github.com/bloudermilk/after-eaton/releases/download/data-latest/parcels.geojson
 https://github.com/bloudermilk/after-eaton/releases/download/data-latest/summary.json
 https://github.com/bloudermilk/after-eaton/releases/download/data-latest/qc-report.json
+https://github.com/bloudermilk/after-eaton/releases/download/data-latest/2020-census-tracts.geojson
+https://github.com/bloudermilk/after-eaton/releases/download/data-latest/2020-census-block-groups.geojson
 https://github.com/bloudermilk/after-eaton/releases/download/data-latest/source-dins.json
 https://github.com/bloudermilk/after-eaton/releases/download/data-latest/source-epicla.json
+https://github.com/bloudermilk/after-eaton/releases/download/data-latest/source-fire-perimeter.json
+https://github.com/bloudermilk/after-eaton/releases/download/data-latest/source-2020-census-tracts.json
+https://github.com/bloudermilk/after-eaton/releases/download/data-latest/source-2020-census-block-groups.json
 ```
 
 We use the explicit `data-latest` tag rather than `/releases/latest/download/` because `latest` resolves by GitHub's own ordering rules (most recent non-prerelease) and could behave unexpectedly when a dated release and the rolling tag are both updated in the same run.
@@ -405,6 +436,6 @@ gh workflow run deploy.yml
 
 - `.github/workflows/deploy.yml` (frontend deploy is currently local-only).
 - Frontend (`web/`) — Vue 3 + Vite SPA.
-- Census-tract / census-block / Altagether aggregates. Boundary source for these is undecided. The current `summary.json` is burn-area-wide only.
+- Altagether-zone aggregates (boundary source undecided). Census-tract and census-block-group aggregates ship as `2020-census-tracts.geojson` / `2020-census-block-groups.geojson` alongside the burn-area `summary.json`.
 - Pipeline-failure webhook alerting.
 - Geometry drop-rate gate.

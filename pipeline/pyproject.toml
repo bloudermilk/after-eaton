@@ -13,7 +13,13 @@ dependencies = [
 after-eaton = "after_eaton.cli:run"
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-httpx>=0.32", "ruff>=0.4", "mypy>=1.10"]
+dev = [
+    "pytest>=8",
+    "pytest-httpx>=0.32",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "types-shapely>=2.0",
+]
 
 [build-system]
 requires = ["hatchling"]

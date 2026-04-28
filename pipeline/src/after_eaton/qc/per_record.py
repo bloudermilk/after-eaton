@@ -103,3 +103,19 @@ def _find_primary_permit_with_units(joined: JoinedParcel) -> dict | None:  # typ
         if units and units > 0:
             return dict(case)
     return None
+
+
+def check_spatial_assignment(unassigned_ains: list[str]) -> list[RecordWarning]:
+    """Emit one warning per parcel whose centroid landed outside every
+    fetched census tract. Likely a corrupt parcel polygon or a perimeter
+    /tract boundary drift in the upstream sources.
+    """
+    return [
+        RecordWarning(
+            ain=ain,
+            code="parcel_outside_census_tracts",
+            detail="parcel centroid did not fall inside any fetched census tract",
+            severity="data",
+        )
+        for ain in unassigned_ains
+    ]
