@@ -175,7 +175,9 @@ Source: `pipeline/src/after_eaton/processing/parcel_analysis.py:_analyze_pre_fir
 
 A single parcel often has multiple fire-related EPIC-LA records — a `PlanManagement` "Rebuild" record filed first for zoning/plan review, followed by one or more `PermitManagement` "New"/"Rebuild Project" records for the actual building permits. ~49% of parcels have ≥2 such records, and the most common pattern is a separate SFR permit + separate ADU permit.
 
-The pipeline runs **two extractors in parallel** on each parcel and prefers the LLM result, with the regex extractor as a cross-validation channel:
+When the LLM is enabled, the pipeline runs **both extractors on every qualifying parcel**: the regex parser (always) and the LLM (whenever it has at least one qualifying record). The two results are compared per residential type; disagreements become per-record info warnings, and **the LLM result wins** — its counts and sqft overwrite the published `post_*` fields, while the regex value is preserved only inside the warning's `detail` string for auditing.
+
+The regex path becomes the *sole* output in two corner cases: (a) the LLM is disabled via `--no-llm-extraction` or a missing `OPENROUTER_API_KEY` (single run-level `llm_disabled` info warning), or (b) the LLM call errors for a specific parcel (per-parcel `llm_extraction_failed` data warning). In both cases no comparison is performed.
 
 ### LLM extractor (primary)
 
@@ -202,19 +204,19 @@ Each structure carries a `confidence` field (`high` / `medium` / `low`); low-con
 
 Results are cached deterministically in `llm-extraction-cache.json` (released alongside other data assets). Cache keys hash `(ain, sorted (case_number, description_hash) tuples, prompt_version, provider, model)`, so a permit moving from "Issued" → "Finaled" doesn't trigger re-extraction, but a description edit does.
 
-The pipeline runs the regex extractor on the same parcel and emits comparison warnings to `qc-report.json`:
+The regex extractor runs on the same parcel; warnings emitted to `qc-report.json`:
 
 - `extraction_count_disagreement` (info) — regex and LLM produced different counts for some residential type.
 - `extraction_sqft_disagreement` (info) — counts match but sqft differs by >10%.
-- `extraction_only_llm` (info) — plan-only parcel; regex had no opinion.
+- `extraction_only_llm` (info) — plan-only parcel; regex had no opinion (no qualifying PermitManagement record).
 - `extraction_low_confidence` (info) — LLM marked at least one structure as low-confidence.
-- `llm_extraction_failed` (data) — LLM call errored; regex fallback used.
+- `llm_extraction_failed` (data) — LLM call errored; regex result kept for that parcel.
 
 The aggregate `extraction_comparison` block in `qc-report.json` reports overall agreement rate, provider/model used, and per-warning-type counts — all informational, not gated.
 
-### Regex extractor (fallback)
+### Regex extractor (always-on cross-validator)
 
-If the LLM is disabled (no API key, `--no-llm-extraction`) or its call fails for a specific parcel, the pipeline falls back to the original single-permit regex parser described below. The regex path also remains the cross-validator when both run.
+The regex parser runs on every parcel regardless of whether the LLM is enabled. When the LLM is on, the regex output is compared against the LLM result and surfaced via the warnings above; when the LLM is off (or its call failed for one parcel), the regex result is what gets published.
 
 Regex selection picks one **primary permit** per parcel:
 
