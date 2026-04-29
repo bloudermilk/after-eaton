@@ -39,6 +39,7 @@ For project overview and data source descriptions, see [README.md](./README.md).
 │    source-fire-perimeter.json              │
 │    source-2020-census-tracts.json          │
 │    source-2020-census-block-groups.json    │
+│    llm-extraction-cache.json               │
 └────────────────────────────────────────────┘
 ```
 
@@ -88,8 +89,11 @@ validate schemas              → sources/schemas.py        (raises SchemaError)
 join cases to parcels by AIN  → processing/join.py
 analyze each parcel           → processing/parcel_analysis.py
    ├─ pre-fire from DINS slots
-   ├─ post-fire from EPIC-LA primary permit
-   ├─ parse DESCRIPTION       → processing/description_parser.py
+   ├─ post-fire (regex)        from EPIC-LA primary permit
+   │     parse DESCRIPTION   → processing/description_parser.py
+   ├─ post-fire (LLM, default) all qualifying plan + permit records
+   │     extract structures  → processing/llm_extraction.py
+   │     compare vs regex    → processing/extraction_compare.py
    ├─ resolve LFL signals     → processing/parcel_analysis.py:_resolve_lfl
    └─ normalize damage / BSD  → processing/normalize.py
 spatial assignment            → processing/spatial_aggregate.py
@@ -119,7 +123,11 @@ For the analytical contract — what each derived field *means* — see [METHODO
 | `processing/normalize.py` | Damage and BSD enums + raw→canonical maps. Rebuild-progress label table. | `DamageLevel`, `BsdStatus`, `normalize_damage`, `normalize_bsd`, `rebuild_progress_label` |
 | `processing/description_parser.py` | EPIC-LA free-text parser: splits a DESCRIPTION into structures, classifies each as `sfr`/`adu`/`jadu`/`sb9`/`mfr`/`garage`/`temporary_housing`/`repair`/`retaining_wall`/`seismic`/`unknown`, extracts sqft. Also extracts LFL/Custom claim from PROJECT_NAME or DESCRIPTION. | `parse_description()`, `extract_lfl_claim()`, `ParsedStructure`, `RESIDENTIAL_TYPES` |
 | `processing/join.py` | Group cases by `MAIN_AIN`, left-join to DINS parcels. Logs unmatched AINs. | `join_cases_to_parcels()`, `JoinedParcel` |
-| `processing/parcel_analysis.py` | Per-parcel synthesis. Reads DINS structure slots for pre-fire; selects primary permit for post-fire; runs LFL resolution; computes size comparison and SB-9/ADU deltas. | `analyze_parcel()`, `ParcelResult`, `_resolve_lfl()`, `_select_primary_permit()` |
+| `processing/parcel_analysis.py` | Per-parcel synthesis. Reads DINS structure slots for pre-fire; selects primary permit for regex post-fire; selects qualifying records (plans + permits) for LLM input; runs LFL resolution; computes size comparison and SB-9/ADU deltas. | `analyze_parcel()`, `ParcelResult`, `_resolve_lfl()`, `_select_primary_permit()`, `select_qualifying_records()`, `pre_fire_summary()` |
+| `processing/llm_provider.py` | OpenRouter chat-completions client (OpenAI-compatible endpoint, `temperature=0`, retry on transient HTTP errors). The cache key includes `model_id` so swapping models invalidates the cache cleanly. | `OpenRouterProvider`, `LLMResponse`, `LLMError` |
+| `processing/llm_prompts.py` | System + user prompt templates and `parcel_cache_key()` (deterministic SHA-256 over sorted record content + provider + model + prompt version). Bump `PROMPT_VERSION` when the prompt changes meaningfully. | `SYSTEM_PROMPT`, `PROMPT_VERSION`, `ParcelContext`, `render_user_prompt()`, `parcel_cache_key()` |
+| `processing/llm_extraction.py` | Per-parcel `extract_structures()` (cache-or-call, fallback on invalid JSON / fenced output) plus cache load/save (single JSON file under `data/llm-extraction-cache.json`) and `prune_cache()`. | `LLMExtraction`, `ExtractedStructure`, `ExtractionCache`, `extract_structures()`, `load_cache()`, `save_cache()`, `prune_cache()` |
+| `processing/extraction_compare.py` | Bucket LLM structures into the regex `PostFire` shape, compare per type, emit `ComparisonIssue`s, and `override_with_llm()` to apply LLM result to a `ParcelResult`. `extraction_metrics()` produces the `extraction_comparison` block in `qc-report.json`. | `derive_post_from_llm()`, `compare_extractions()`, `override_with_llm()`, `extraction_metrics()`, `ExtractionRunInfo` |
 | `processing/aggregate.py` | Roll `ParcelResult` list into `SummaryResult` (counts only, no per-parcel detail). The shared `count_parcels()` helper produces the same counting set used by per-tract / per-block-group aggregation. | `aggregate_burn_area()`, `count_parcels()`, `SummaryResult`, `RegionCounts` |
 | `processing/spatial_aggregate.py` | Assign each parcel to one tract and one block group by polygon-centroid containment (shapely STRtree); roll up per-region counts. | `aggregate_by_region()`, `RegionFeature`, `SpatialAggregation` |
 | `qc/per_record.py` | Per-parcel data-quality warnings. Each warning carries a `severity` of `data` (counts toward threshold) or `info` (real-world ambiguity, surfaced but doesn't gate the run). | `check_record()`, `RecordWarning` |
@@ -129,7 +137,7 @@ For the analytical contract — what each derived field *means* — see [METHODO
 | `outputs/region_writer.py` | FeatureCollection writer for tract / block-group GeoJSONs. | `write_regions_geojson()` |
 | `outputs/summary_writer.py` | Dump `SummaryResult` as JSON. | `write_summary_json()` |
 | `outputs/raw_writer.py` | Snapshot raw fetched records to disk for reproducibility. | `write_raw_records()` |
-| `cli.py` | Click entrypoint; one `run()` command with `--out-dir` and `--log-level`. | `run()` |
+| `cli.py` | Click entrypoint; one `run()` command with `--out-dir`, `--log-level`, and LLM-extraction flags (`--llm-extraction`, `--llm-provider`, `--llm-model`, `--llm-cache-path`). Loads `.env` for local development. | `run()` |
 
 ### Sources
 
@@ -186,6 +194,7 @@ All outputs are written to `data/` locally and uploaded as Release assets in CI:
 | `source-fire-perimeter.json` | JSON object | Raw Eaton Fire perimeter polygon(s) (same envelope). |
 | `source-2020-census-tracts.json` | JSON object | Raw 2020 census tract polygons within the perimeter envelope (same envelope). |
 | `source-2020-census-block-groups.json` | JSON object | Raw 2020 census block group polygons within the perimeter envelope (same envelope). |
+| `llm-extraction-cache.json` | JSON object | Per-parcel LLM extractions keyed deterministically on record content + provider + model + prompt version. Restored at the start of the next CI run so steady-state pipeline cost is bounded by the daily delta of changed records. |
 
 Every output carries a `generated_at` ISO 8601 timestamp:
 - `summary.json`, `qc-report.json`, `source-dins.json`, `source-epicla.json`, `source-fire-perimeter.json`, `source-2020-census-tracts.json`, `source-2020-census-block-groups.json`: top-level field (`fetched_at` on raw source files)
@@ -392,7 +401,8 @@ Fixtures are sourced from real live records (originally fetched at plan-writing 
 
 - `GITHUB_TOKEN` — automatically provided by Actions, sufficient for `gh release` operations on the same repo. No PAT needed.
 - Both ArcGIS sources are public; no API keys.
-- Local development needs no secrets.
+- `OPENROUTER_API_KEY` — required for the LLM-based structure extractor. Set as a repo secret (`Settings → Secrets and variables → Actions`) for CI; for local development, place in `pipeline/.env` (gitignored). If missing, the pipeline falls back to regex-only extraction and emits an `llm_disabled` info-warning.
+- Local development for regex-only extraction needs no secrets; pass `--no-llm-extraction` to skip the LLM pass entirely.
 
 ## Operational notes
 

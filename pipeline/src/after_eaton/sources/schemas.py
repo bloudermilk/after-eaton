@@ -89,6 +89,7 @@ class EpicCase(TypedDict, total=False):
     CASENUMBER: NotRequired[str | None]
     PROJECT_NAME: NotRequired[str | None]
     PROJECTNAME: NotRequired[str | None]
+    PROJECT_NUMBER: NotRequired[str | None]
     DISASTER_TYPE: NotRequired[str | None]
     WORKCLASS_NAME: NotRequired[str | None]
     USE_PROPOSED1: NotRequired[str | None]

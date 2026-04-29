@@ -1,2 +1,7 @@
 # Pipeline output (committed via release artifacts, not git)
 data/
+
+# Local secrets — never commit
+.env
+.env.*
+!.env.example

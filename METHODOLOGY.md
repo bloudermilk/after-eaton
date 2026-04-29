@@ -171,13 +171,56 @@ Source: `pipeline/src/after_eaton/processing/parcel_analysis.py:_analyze_pre_fir
 
 ---
 
-## Post-fire structure parsing (EPIC-LA descriptions)
+## Post-fire structure inference
 
-For each parcel we select a **primary permit** from the parcel's fire cases:
+A single parcel often has multiple fire-related EPIC-LA records — a `PlanManagement` "Rebuild" record filed first for zoning/plan review, followed by one or more `PermitManagement` "New"/"Rebuild Project" records for the actual building permits. ~49% of parcels have ≥2 such records, and the most common pattern is a separate SFR permit + separate ADU permit.
 
-1. Restrict to `MODULENAME = 'PermitManagement'` cases whose `WORKCLASS_NAME` is `New` or `Rebuild Project` (these are the actual rebuild permits — not temp housing, not addition/alteration).
-2. Among those, pick the case with the highest `REBUILD_PROGRESS_NUM` (ties broken by source order). This is the most-progressed permit and carries the most authoritative description.
-3. If no qualifying permit exists, all `post_*` fields on the parcel are `null` — i.e. no rebuild permit yet.
+The pipeline runs **two extractors in parallel** on each parcel and prefers the LLM result, with the regex extractor as a cross-validation channel:
+
+### LLM extractor (primary)
+
+For every parcel with at least one **qualifying record**, we send the full bundle to an LLM and ask it to return the list of structures expected post-completion.
+
+A record qualifies when:
+- `MODULENAME = "PermitManagement"` and `WORKCLASS_NAME ∈ {"New", "Rebuild Project"}`, **or**
+- `MODULENAME = "PlanManagement"` and `WORKCLASS_NAME = "Rebuild"`.
+
+Temporary Housing Project records (RVs / trailers) are excluded — they aren't part of the planned final state.
+
+The LLM follows explicit dedup rules (`pipeline/src/after_eaton/processing/llm_prompts.py:SYSTEM_PROMPT`):
+
+1. Numbered list items in one description (`1.`, `2.`, …) → distinct structures.
+2. Explicit `REVISION TO`, `REPLACES`, `SUPERSEDES`, `VOIDS` language → same structure (most recent wins).
+3. Plan + permit on the same project → same structure (most-recent-by-`APPLY_DATE` wins, regardless of module).
+4. `UNIT 1`/`UNIT 2`, `BUILDING 1`/`BUILDING 2`, `FRONT`/`REAR` separators → distinct structures.
+5. Floor labels alone do **not** merge — each independently-habitable dwelling unit (own kitchen, bath, bedrooms — i.e. each unit that would receive its own street address) counts separately. Worked example: AIN 5845016021's "2 NEW ADU DUPLEXS … 798 SF PER UNIT" with four floor-by-floor permits = **4 ADUs**, not 1.
+6. Cross-references like "PERMIT FEES PAID UNDER BLDR…" are billing conveniences and do **not** imply duplication.
+7. Same type + different sqft → distinct.
+8. Different types → distinct.
+
+Each structure carries a `confidence` field (`high` / `medium` / `low`); low-confidence items emit a per-record QC warning so reviewers can audit.
+
+Results are cached deterministically in `llm-extraction-cache.json` (released alongside other data assets). Cache keys hash `(ain, sorted (case_number, description_hash) tuples, prompt_version, provider, model)`, so a permit moving from "Issued" → "Finaled" doesn't trigger re-extraction, but a description edit does.
+
+The pipeline runs the regex extractor on the same parcel and emits comparison warnings to `qc-report.json`:
+
+- `extraction_count_disagreement` (info) — regex and LLM produced different counts for some residential type.
+- `extraction_sqft_disagreement` (info) — counts match but sqft differs by >10%.
+- `extraction_only_llm` (info) — plan-only parcel; regex had no opinion.
+- `extraction_low_confidence` (info) — LLM marked at least one structure as low-confidence.
+- `llm_extraction_failed` (data) — LLM call errored; regex fallback used.
+
+The aggregate `extraction_comparison` block in `qc-report.json` reports overall agreement rate, provider/model used, and per-warning-type counts — all informational, not gated.
+
+### Regex extractor (fallback)
+
+If the LLM is disabled (no API key, `--no-llm-extraction`) or its call fails for a specific parcel, the pipeline falls back to the original single-permit regex parser described below. The regex path also remains the cross-validator when both run.
+
+Regex selection picks one **primary permit** per parcel:
+
+1. Restrict to `MODULENAME = 'PermitManagement'` cases whose `WORKCLASS_NAME` is `New` or `Rebuild Project`.
+2. Among those, pick the case with the highest `REBUILD_PROGRESS_NUM` (ties broken by source order).
+3. If no qualifying permit exists, all `post_*` fields on the parcel are `null`.
 
 The primary permit's `DESCRIPTION` is then parsed by `parse_description()`. The parser's job is to (a) split a multi-structure description into segments, (b) classify each segment's primary structure type, and (c) extract that segment's primary square footage.
 
@@ -248,7 +291,7 @@ We group segments by type and sum sqft within each group:
 
 `garage`, `temporary_housing`, `repair`, `retaining_wall`, `seismic`, and `unknown` segments are recognized for QC purposes but do not contribute to dwelling counts.
 
-If no primary permit exists for the parcel, all `post_*` fields are `null`.
+If no primary permit exists for the parcel, all `post_*` fields are `null`. (Under the LLM path, plan-only parcels can still produce non-null `post_*` values — the LLM will return whatever structures are described in the plan record.)
 
 ---
 

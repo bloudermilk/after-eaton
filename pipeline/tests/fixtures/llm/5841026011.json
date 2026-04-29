@@ -1,0 +1,42 @@
+{
+  "ain": "5841026011",
+  "system_prompt": "You are an expert in interpreting Los Angeles County rebuild records (plan applications and building permits) for parcels affected by the Eaton Fire of January 2025 in Altadena, CA.\n\nYour job: given the full set of fire-related records filed for one parcel, infer the FINAL STATE of structures on the property, assuming all currently filed plans and permits are carried through to completion. You will see two record types:\n\n  - PlanManagement (early-stage zoning/plan review; WORKCLASS = \"Rebuild\")\n  - PermitManagement (the actual building permit; WORKCLASS = \"New\" or \"Rebuild Project\")\n\nFor one structure, both a plan record and a permit record may exist (the plan is filed first, the permit is filed later for the same project). Treat plan + permit on the same project + same described structure as ONE structure.\n\nDEFINITION OF A STRUCTURE\nA \"structure\" for our purposes is one independently-habitable dwelling unit, each of which would receive its own street address. Two ADUs stacked in one physical building (each with its own kitchen, bathroom, bedroom set) count as TWO structures, not one. A two-story SFR with a single kitchen on the ground floor and bedrooms upstairs is ONE structure.\n\nDEDUP RULES (apply in order)\n\n1. NUMBERED LIST ITEMS in a single record's DESCRIPTION (lines starting \"1.\", \"2.\", \"3.\") are DISTINCT structures within that record. Each numbered item gets its own entry in the output.\n\n2. EXPLICIT REVISION / REPLACEMENT / VOIDING language across records \u2014 only these phrases imply two records describe the same structure:\n       \"REVISION TO PERMIT [number]\"\n       \"REPLACES PERMIT [number]\"\n       \"SUPERSEDES PERMIT [number]\"\n       \"VOIDS PERMIT [number]\"\n   In these cases, prefer the most recently APPLIED record's interpretation.\n\n3. PLAN + PERMIT FOR SAME PROJECT. A PlanManagement \"Rebuild\" record and a PermitManagement record sharing PROJECT_NUMBER (or, if PROJECT_NUMBER is null, with very similar DESCRIPTION text) describe the same structure. Use the MOST RECENT record's data (highest APPLY_DATE), regardless of whether the most recent is the plan or the permit. Plans get revised after permits are filed; the latest submission reflects current intent.\n\n4. EXPLICIT BUILDING / UNIT SEPARATORS \u2014 these indicate DISTINCT structures even within one project:\n       \"UNIT 1\" / \"UNIT 2\"\n       \"BUILDING 1\" / \"BUILDING 2\"\n       \"FIRST BUILDING\" / \"SECOND BUILDING\"\n       \"FRONT\" / \"REAR\" (when describing distinct dwellings)\n\n5. FLOOR LABELS DO NOT AUTOMATICALLY MERGE. \"1ST FLOOR\" + \"2ND FLOOR\" with matching sqft are TWO structures if each is described as a complete independent dwelling (each has its own kitchen, bath, bedrooms). They are ONE structure only if the description makes clear it's a single multi-story home (e.g., \"kitchen on first floor, bedrooms on second\").\n\n   Worked example \u2014 \"EATON FIRE AFFECTED PROPERTY --- 2 NEW ADU DUPLEXS R-3 OCCUPANCY ... 798 SF PER UNIT\" plus four permits each labeled \"ADU 798 SF WITH 2 BEDROOMS AND 2 BATHROOMS AND COMMON STAIRWAY, 1ST/2ND FLOOR, FIRST/SECOND BUILDING\" \u2192 2 buildings \u00d7 2 stacked units each \u00d7 own kitchen/bath/bedrooms = 4 ADUs. The shared stairway doesn't merge the units; each is independently habitable.\n\n6. CROSS-REFERENCES like \"PERMIT FEES PAID UNDER BLDR\u2026\" are billing conveniences and DO NOT imply duplication. Treat the records as independent unless rules 2 or 3 also apply.\n\n7. SAME TYPE + DIFFERENT SQFT \u2192 always DISTINCT structures.\n\n8. PERMITS WITH WORKCLASS_NAME = \"Temporary Housing Project\" are excluded from input; if you somehow see one, ignore it (RVs / trailers are not part of the planned final state).\n\nOUTPUT FORMAT (JSON, no prose)\n\n{\n  \"structures\": [\n    {\n      \"struct_type\": \"sfr\" | \"adu\" | \"jadu\" | \"sb9\" | \"mfr\" | \"garage\" | \"repair\" | \"other\",\n      \"sqft\": <integer or null>,\n      \"confidence\": \"high\" | \"medium\" | \"low\",\n      \"evidence_case_numbers\": [\"UNC-...\", ...],\n      \"notes\": \"<short, only if non-obvious; otherwise null>\"\n    }\n  ],\n  \"reasoning\": \"<1-2 sentences explaining your interpretation>\"\n}\n\nCONFIDENCE GUIDANCE\n- \"high\": clear, unambiguous signal; no conflicting records\n- \"medium\": some interpretation required (rule 3 or 5 applied)\n- \"low\": genuinely ambiguous; flag for human review\n",
+  "user_prompt": "PARCEL CONTEXT\nAIN: 5841026011\nAddress: 2804 SANTA ANITA AVE ALTADENA CA 91001\nDAMAGE: Destroyed (>50%)\nPre-fire structures (from DINS): 2 SFR (1592 SF total)\n\nRECORDS (3 qualifying, sorted by APPLY_DATE):\n\n[1] CASENUMBER:     UNC-BLDR250123000677\n    MODULENAME:     PermitManagement\n    WORKCLASS:      New\n    PROJECT_NUMBER: (none)\n    PROJECT_NAME:   (none)\n    STATUS:         Issued\n    PROGRESS:       6 (Issued)\n    APPLY_DATE:     2025-01-23\n    DESCRIPTION:\n      EATON FIRE REBUILD - NEW 1-STORY 1,949 S.F. SFR (3 BEDROOMS, 2 BATHROOMS AND 1 POWDER ROOM) WITH 366 S.F. ATTACHED DECK\n\n[2] CASENUMBER:     UNC-BLDR250219001643\n    MODULENAME:     PermitManagement\n    WORKCLASS:      New\n    PROJECT_NUMBER: (none)\n    PROJECT_NAME:   (none)\n    STATUS:         Issued\n    PROGRESS:       6 (Issued)\n    APPLY_DATE:     2025-02-19\n    DESCRIPTION:\n      EATON FIRE REBUILD - NEW DETACHED 1-STORY 534 S.F. ADU (ONE BEDROOM AND ONE BATHROOM) WITH 137 S.F. ATTACHED COVERED PORCH\n\n[3] CASENUMBER:     CREC2025000913\n    MODULENAME:     PlanManagement\n    WORKCLASS:      Rebuild\n    PROJECT_NUMBER: PRJ2025-002844\n    PROJECT_NAME:   Like-for-like ADU Rebuild @ 2804 Santa Anita Ave\n    STATUS:         Hold\n    PROGRESS:       2 (Plans Under Review)\n    APPLY_DATE:     2025-06-13\n    DESCRIPTION:\n      PRJ2025-002844 - Like-for-like ADU Rebuild @ 2804 Santa Anita Ave\n      EATON FIRE REBUILD - NEW DETACHED 1-STORY 534 S.F. ADU (ONE BEDROOM AND ONE BATHROOM) WITH 137 S.F. ATTACHED COVERED PORCH\n      \n      drpdrtbs\n",
+  "extraction": {
+    "key": "sha256:542b2518ad6ea149874ebc44f19dab4d96d7c3e2e1298f8f5d9a43d2efd8dd8a",
+    "ain": "5841026011",
+    "extracted_at": "2026-04-29T00:10:06Z",
+    "provider": "openrouter",
+    "model": "anthropic/claude-sonnet-4-6",
+    "prompt_version": 1,
+    "input_case_numbers": [
+      "UNC-BLDR250123000677",
+      "UNC-BLDR250219001643",
+      "CREC2025000913"
+    ],
+    "structures": [
+      {
+        "struct_type": "sfr",
+        "sqft": 1949,
+        "confidence": "high",
+        "evidence_case_numbers": [
+          "UNC-BLDR250123000677"
+        ],
+        "notes": "1-story SFR with attached deck; deck sqft excluded from living area."
+      },
+      {
+        "struct_type": "adu",
+        "sqft": 534,
+        "confidence": "high",
+        "evidence_case_numbers": [
+          "UNC-BLDR250219001643",
+          "CREC2025000913"
+        ],
+        "notes": "Permit (record 2) and plan (record 3) share identical description text and describe the same detached ADU. Most recent record is the plan (2025-06-13); structure is the same 534 SF ADU."
+      }
+    ],
+    "reasoning": "Record 1 is a standalone SFR permit. Records 2 and 3 describe the same detached 534 SF ADU (identical description text, same project), so they are treated as one structure per rule 3, using the most recent record's data. Total: 1 SFR + 1 ADU.",
+    "input_tokens": 1781,
+    "output_tokens": 302
+  }
+}

@@ -7,6 +7,7 @@ dependencies = [
     "tenacity>=9.0",
     "shapely>=2.0",
     "click>=8.1",
+    "python-dotenv>=1.0",
 ]
 
 [project.scripts]
@@ -30,6 +31,10 @@ packages = ["src/after_eaton"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Prompt file is content-as-string; line breaks would change what's sent to the LLM.
+"src/after_eaton/processing/llm_prompts.py" = ["E501"]
 
 [tool.mypy]
 strict = true

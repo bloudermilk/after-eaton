@@ -29,6 +29,7 @@ _IDENTICAL_TOLERANCE = 10  # sqft
 _EATON_DISASTER = "Eaton Fire (01-2025)"
 _EATON_DESC_RE = re.compile(r"eaton fire", re.I)
 _PRIMARY_PERMIT_WORKCLASSES = {"New", "Rebuild Project"}
+_PLAN_REBUILD_WORKCLASS = "Rebuild"
 
 
 @dataclass
@@ -78,9 +79,9 @@ class ParcelResult:
 
 def analyze_parcel(joined: JoinedParcel) -> ParcelResult:
     din = joined.din
-    fire_cases = _filter_fire_cases(joined.cases)
+    fire_cases = filter_fire_cases(joined.cases)
 
-    pre = _analyze_pre_fire(din)
+    pre = analyze_pre_fire(din)
     progress = _max_progress(fire_cases)
     primary = _select_primary_permit(fire_cases)
     post = _analyze_post_fire(primary)
@@ -128,7 +129,7 @@ def analyze_parcel(joined: JoinedParcel) -> ParcelResult:
 
 
 @dataclass(frozen=True)
-class _PreFire:
+class PreFire:
     sfr_count: int
     sfr_sqft: int | None
     adu_count: int
@@ -138,7 +139,7 @@ class _PreFire:
 
 
 @dataclass(frozen=True)
-class _PostFire:
+class PostFire:
     sfr_count: int | None
     sfr_sqft: int | None
     adu_count: int | None
@@ -149,7 +150,7 @@ class _PostFire:
     sb9_sqft: int | None
 
 
-def _analyze_pre_fire(din: DinsParcel) -> _PreFire:
+def analyze_pre_fire(din: DinsParcel) -> PreFire:
     use_desc = (din.get("UseDescription") or "").strip().lower()
     is_single_use = use_desc == "single"
 
@@ -174,7 +175,7 @@ def _analyze_pre_fire(din: DinsParcel) -> _PreFire:
         elif prefix in {"02", "03", "04", "05"}:
             mfr_sqfts.append(sqft_val)
 
-    return _PreFire(
+    return PreFire(
         sfr_count=len(sfr_sqfts),
         sfr_sqft=_sum_int(sfr_sqfts),
         adu_count=len(adu_sqfts),
@@ -182,6 +183,19 @@ def _analyze_pre_fire(din: DinsParcel) -> _PreFire:
         mfr_count=len(mfr_sqfts),
         mfr_sqft=_sum_int(mfr_sqfts),
     )
+
+
+def pre_fire_summary(din: DinsParcel) -> str:
+    """Human-readable summary of pre-fire structures, for the LLM prompt."""
+    pre = analyze_pre_fire(din)
+    parts: list[str] = []
+    if pre.sfr_count:
+        parts.append(f"{pre.sfr_count} SFR ({pre.sfr_sqft or '?'} SF total)")
+    if pre.adu_count:
+        parts.append(f"{pre.adu_count} ADU ({pre.adu_sqft or '?'} SF total)")
+    if pre.mfr_count:
+        parts.append(f"{pre.mfr_count} MFR ({pre.mfr_sqft or '?'} SF total)")
+    return ", ".join(parts) if parts else "(none recorded)"
 
 
 def _resolve_lfl(fire_cases: list[EpicCase]) -> tuple[bool | None, bool]:
@@ -227,7 +241,7 @@ def _resolve_lfl(fire_cases: list[EpicCase]) -> tuple[bool | None, bool]:
     return chosen, conflict
 
 
-def _filter_fire_cases(cases: list[EpicCase]) -> list[EpicCase]:
+def filter_fire_cases(cases: list[EpicCase]) -> list[EpicCase]:
     fire: list[EpicCase] = []
     for case in cases:
         if case.get("DISASTER_TYPE") == _EATON_DISASTER:
@@ -260,9 +274,33 @@ def _select_primary_permit(cases: list[EpicCase]) -> EpicCase | None:
     return max(candidates, key=lambda c: c.get("REBUILD_PROGRESS_NUM") or 0)
 
 
-def _analyze_post_fire(primary: EpicCase | None) -> _PostFire:
+def select_qualifying_records(cases: list[EpicCase]) -> list[EpicCase]:
+    """Return all fire-related records eligible for LLM-based structure inference.
+
+    Includes PermitManagement records with WORKCLASS_NAME ∈ {"New", "Rebuild
+    Project"} and PlanManagement records with WORKCLASS_NAME == "Rebuild".
+    Skips Temporary Housing Project records — RVs/trailers aren't part of the
+    planned final state.
+    """
+    return [
+        c
+        for c in cases
+        if (
+            (
+                c.get("MODULENAME") == "PermitManagement"
+                and c.get("WORKCLASS_NAME") in _PRIMARY_PERMIT_WORKCLASSES
+            )
+            or (
+                c.get("MODULENAME") == "PlanManagement"
+                and c.get("WORKCLASS_NAME") == _PLAN_REBUILD_WORKCLASS
+            )
+        )
+    ]
+
+
+def _analyze_post_fire(primary: EpicCase | None) -> PostFire:
     if primary is None:
-        return _PostFire(None, None, None, None, None, None, None, None)
+        return PostFire(None, None, None, None, None, None, None, None)
 
     structures = parse_description(primary.get("DESCRIPTION"))
 
@@ -281,7 +319,7 @@ def _analyze_post_fire(primary: EpicCase | None) -> _PostFire:
     mfr_n, mfr_sq = bucket("mfr")
     sb9_n, sb9_sq = bucket("sb9")
 
-    return _PostFire(
+    return PostFire(
         sfr_count=sfr_n,
         sfr_sqft=sfr_sq,
         adu_count=adu_n,

@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import IO
+from typing import IO, Any
 
 from .aggregate import QcFailedError, ThresholdCheck
 from .per_record import RecordWarning
@@ -21,6 +21,8 @@ class QcReport:
     total_parcels: int
     warnings: list[RecordWarning]
     thresholds: list[ThresholdCheck]
+    # Informational metrics — included in qc-report.json but not gated.
+    extraction_comparison: dict[str, Any] = field(default_factory=dict)
 
     @property
     def passed(self) -> bool:
@@ -28,13 +30,15 @@ class QcReport:
 
 
 def write_report(report: QcReport, out_path: Path) -> None:
-    payload = {
+    payload: dict[str, Any] = {
         "generated_at": report.generated_at,
         "total_parcels": report.total_parcels,
         "passed": report.passed,
         "thresholds": [asdict(c) for c in report.thresholds],
         "warnings": [asdict(w) for w in report.warnings],
     }
+    if report.extraction_comparison:
+        payload["extraction_comparison"] = report.extraction_comparison
     out_path.write_text(json.dumps(payload, indent=2))
 
 

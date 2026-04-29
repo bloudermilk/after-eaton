@@ -28,8 +28,20 @@ jobs:
         working-directory: pipeline
         run: pip install -e .
 
+      - name: Restore LLM extraction cache from data-latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p data
+          gh release download data-latest \
+            --pattern llm-extraction-cache.json \
+            --dir data \
+            --clobber || echo "no existing cache asset; pipeline will start with an empty cache"
+
       - name: Run pipeline
         working-directory: pipeline
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: after-eaton --out-dir ../data --log-level INFO
 
       - name: Publish releases
@@ -49,6 +61,7 @@ jobs:
             data/source-fire-perimeter.json
             data/source-2020-census-tracts.json
             data/source-2020-census-block-groups.json
+            data/llm-extraction-cache.json
           )
 
           gh release view "$tag" >/dev/null 2>&1 \

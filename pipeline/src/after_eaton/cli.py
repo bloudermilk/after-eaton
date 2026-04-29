@@ -9,17 +9,38 @@ from pathlib import Path
 from typing import Any, cast
 
 import click
+from dotenv import load_dotenv
 
 from .outputs.geojson_writer import write_parcels_geojson
 from .outputs.raw_writer import write_raw_records
 from .outputs.region_writer import write_regions_geojson
 from .outputs.summary_writer import write_summary_json
 from .processing.aggregate import aggregate_burn_area
-from .processing.join import join_cases_to_parcels
-from .processing.parcel_analysis import analyze_parcel
+from .processing.extraction_compare import (
+    ExtractionRunInfo,
+    extraction_metrics,
+    override_with_llm,
+)
+from .processing.join import JoinedParcel, join_cases_to_parcels
+from .processing.llm_extraction import (
+    ExtractionCache,
+    extract_structures,
+    load_cache,
+    prune_cache,
+    save_cache,
+)
+from .processing.llm_prompts import ParcelContext
+from .processing.llm_provider import LLMError, OpenRouterProvider
+from .processing.parcel_analysis import (
+    ParcelResult,
+    analyze_parcel,
+    filter_fire_cases,
+    pre_fire_summary,
+    select_qualifying_records,
+)
 from .processing.spatial_aggregate import aggregate_by_region
 from .qc.aggregate import QcFailedError, check_thresholds
-from .qc.per_record import check_record, check_spatial_assignment
+from .qc.per_record import RecordWarning, check_record, check_spatial_assignment
 from .qc.report import QcReport, enforce, print_report, write_report
 from .sources.census import fetch_census_block_groups, fetch_census_tracts
 from .sources.dins import fetch_dins_parcels
@@ -43,14 +64,42 @@ logger = logging.getLogger("after_eaton")
     show_default=True,
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
 )
-def run(out_dir: Path, log_level: str) -> None:
+@click.option(
+    "--llm-extraction/--no-llm-extraction",
+    default=True,
+    show_default=True,
+    help="Enable LLM-based structure extraction (requires OPENROUTER_API_KEY in env).",
+)
+@click.option(
+    "--llm-model",
+    default="anthropic/claude-sonnet-4-6",
+    show_default=True,
+    help="OpenRouter routing string for the model.",
+)
+@click.option(
+    "--llm-cache-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to llm-extraction-cache.json (default: <out-dir>/llm-extraction-cache.json).",  # noqa: E501
+)
+def run(
+    out_dir: Path,
+    log_level: str,
+    llm_extraction: bool,
+    llm_model: str,
+    llm_cache_path: Path | None,
+) -> None:
     """Fetch sources, join, analyze, QC, and write outputs."""
     logging.basicConfig(
         level=getattr(logging, log_level),
         format="%(asctime)s %(levelname)s %(name)s :: %(message)s",
     )
+    # .env is loaded for local development; CI sets env vars directly.
+    load_dotenv(Path.cwd() / ".env")
     out_dir.mkdir(parents=True, exist_ok=True)
     generated_at = datetime.now(UTC).isoformat(timespec="seconds")
+
+    cache_path = llm_cache_path or (out_dir / "llm-extraction-cache.json")
 
     logger.info("fetching DINS parcels")
     parcels = fetch_dins_parcels()
@@ -111,8 +160,36 @@ def run(out_dir: Path, log_level: str) -> None:
         sys.exit(2)
 
     joined = join_cases_to_parcels(parcels, cases)
-    results = [analyze_parcel(jp) for jp in joined]
+
+    provider, llm_disabled_reason = _maybe_build_provider(llm_extraction, llm_model)
+    extraction_cache = (
+        load_cache(cache_path) if provider is not None else ExtractionCache()
+    )
+    if provider is not None:
+        logger.info(
+            "LLM extraction enabled (model=%s); cache has %d entries",
+            provider.model_id,
+            len(extraction_cache.entries),
+        )
+    else:
+        logger.warning("LLM extraction disabled: %s", llm_disabled_reason)
+
+    results, llm_warnings, run_info = _analyze_all(
+        joined, provider=provider, cache=extraction_cache
+    )
     pairs = [(r, jp.din) for jp, r in zip(joined, results, strict=True)]
+
+    if provider is not None:
+        prune_cache(extraction_cache, valid_ains={r.ain for r in results})
+        save_cache(cache_path, extraction_cache)
+        logger.info(
+            "LLM cache saved to %s (%d entries; %d cache hits, %d misses, %d failures)",
+            cache_path,
+            len(extraction_cache.entries),
+            run_info.cache_hits,
+            run_info.cache_misses,
+            run_info.parcels_failed,
+        )
 
     tract_aggregation = aggregate_by_region(
         pairs,
@@ -125,7 +202,16 @@ def run(out_dir: Path, log_level: str) -> None:
         id_fields=["BG20", "CT20", "LABEL"],
     )
 
-    record_warnings = []
+    record_warnings: list[RecordWarning] = list(llm_warnings)
+    if not llm_extraction:
+        record_warnings.append(
+            RecordWarning(
+                ain="*",
+                code="llm_disabled",
+                detail=llm_disabled_reason or "LLM extraction disabled by flag",
+                severity="info",
+            )
+        )
     for jp, res in zip(joined, results, strict=True):
         record_warnings.extend(check_record(jp, res))
     record_warnings.extend(check_spatial_assignment(tract_aggregation.unassigned_ains))
@@ -142,6 +228,7 @@ def run(out_dir: Path, log_level: str) -> None:
         total_parcels=len(results),
         warnings=record_warnings,
         thresholds=thresholds,
+        extraction_comparison=extraction_metrics(run_info, record_warnings),
     )
     print_report(report)
     write_report(report, out_dir / "qc-report.json")
@@ -169,6 +256,110 @@ def run(out_dir: Path, log_level: str) -> None:
     )
 
     logger.info("wrote outputs to %s", out_dir)
+
+
+def _maybe_build_provider(
+    enabled: bool,
+    model_id: str,
+) -> tuple[OpenRouterProvider | None, str | None]:
+    if not enabled:
+        return None, "disabled by --no-llm-extraction"
+    try:
+        return OpenRouterProvider(model_id=model_id), None
+    except LLMError as exc:
+        return None, str(exc)
+
+
+def _analyze_all(
+    joined: list[JoinedParcel],
+    *,
+    provider: OpenRouterProvider | None,
+    cache: ExtractionCache,
+) -> tuple[list[ParcelResult], list[RecordWarning], ExtractionRunInfo]:
+    """Run analyze_parcel on each joined parcel; if a provider is given, run
+    LLM extraction in parallel and overlay its result."""
+    results: list[ParcelResult] = []
+    warnings: list[RecordWarning] = []
+    parcels_attempted = 0
+    parcels_extracted = 0
+    parcels_failed = 0
+    plan_only_parcels = 0
+    cache_hits = 0
+    cache_misses = 0
+
+    for jp in joined:
+        result = analyze_parcel(jp)
+        if provider is None:
+            results.append(result)
+            continue
+
+        fire_cases = filter_fire_cases(jp.cases)
+        qualifying = select_qualifying_records(fire_cases)
+        has_qualifying_permit = any(
+            c.get("MODULENAME") == "PermitManagement" for c in qualifying
+        )
+        if not qualifying:
+            results.append(result)
+            continue
+
+        parcels_attempted += 1
+        if not has_qualifying_permit:
+            plan_only_parcels += 1
+
+        ctx = ParcelContext(
+            ain=result.ain,
+            address=result.address,
+            damage=result.damage.value
+            if hasattr(result.damage, "value")
+            else str(result.damage),
+            pre_fire_summary=pre_fire_summary(jp.din),
+        )
+        cache_size_before = len(cache.entries)
+        extraction = extract_structures(ctx, qualifying, provider=provider, cache=cache)
+        if extraction is None:
+            parcels_failed += 1
+            warnings.append(
+                RecordWarning(
+                    ain=result.ain,
+                    code="llm_extraction_failed",
+                    detail="LLM call failed or returned unparseable output",
+                    severity="data",
+                )
+            )
+            results.append(result)
+            continue
+        parcels_extracted += 1
+        if len(cache.entries) > cache_size_before:
+            cache_misses += 1
+        else:
+            cache_hits += 1
+
+        new_result, issues = override_with_llm(
+            result, extraction, has_qualifying_permit=has_qualifying_permit
+        )
+        for issue in issues:
+            warnings.append(
+                RecordWarning(
+                    ain=new_result.ain,
+                    code=issue.code,
+                    detail=issue.detail,
+                    severity=issue.severity,
+                )
+            )
+        results.append(new_result)
+
+    info = ExtractionRunInfo(
+        enabled=provider is not None,
+        model=provider.model_id if provider else "",
+        prompt_version=cache.prompt_version,
+        parcels_attempted=parcels_attempted,
+        parcels_extracted=parcels_extracted,
+        parcels_failed=parcels_failed,
+        plan_only_parcels=plan_only_parcels,
+        cache_hits=cache_hits,
+        cache_misses=cache_misses,
+    )
+    return results, warnings, info
 
 
 if __name__ == "__main__":  # pragma: no cover
