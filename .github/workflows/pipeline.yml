@@ -52,6 +52,7 @@ jobs:
           tag="data-$(TZ='America/Los_Angeles' date +%Y-%m-%d)"
           files=(
             data/parcels.geojson
+            data/parcels.csv
             data/summary.json
             data/qc-report.json
             data/2020-census-tracts.geojson

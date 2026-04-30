@@ -17,7 +17,7 @@ We pull from two public ArcGIS Feature Servers operated by LA County. No authent
 
 ### DINS — 2025 Parcels with DINS data
 
-- **Service:** `services.arcgis.com/RmCCgQtiZLDCtblq/.../2025_Parcels_with_DINS_data/FeatureServer/5`
+- **Service:** [API Service](https://data.lacounty.gov/datasets/lacounty::2025-parcels-with-dins-data/about)
 - **Filter applied:** `COMMUNITY = 'Altadena'`
 - **Records fetched:** ~9,500 parcels (the entire Altadena community, including parcels with no fire damage — we keep them so totals make sense).
 - **Persisted as:** `source-dins.json` in every release.
@@ -43,7 +43,7 @@ DINS fields we read:
 
 ### EPIC-LA — Eaton/Palisades Fire Recovery Cases
 
-- **Service:** `services.arcgis.com/RmCCgQtiZLDCtblq/.../EPICLA_Eaton_Palisades/FeatureServer/0`
+- **Service:** [API Service](https://lacounty.maps.arcgis.com/home/item.html?id=e87c8fcf5a2c4f7e87198b0c208d3d9f)
 - **Filter applied:** `DISASTER_TYPE = 'Eaton Fire (01-2025)'`
 - **Records fetched:** ~5,700 cases (one row per *case*, not per parcel).
 - **Persisted as:** `source-epicla.json` in every release.
@@ -68,14 +68,14 @@ EPIC-LA fields we read:
 
 ### Eaton Fire Perimeter
 
-- **Service:** `services.arcgis.com/RmCCgQtiZLDCtblq/.../Eaton_Fire_Perimeter/FeatureServer/0`
+- **Service:** [API Service](https://data.lacounty.gov/datasets/lacounty::eaton-fire-perimeter/about)
 - **Filter applied:** none — the layer covers only the Eaton Fire.
 - **Persisted as:** `source-fire-perimeter.json`.
 - **Used for:** computing the bounding envelope used to filter the 2020 census tract and block group queries.
 
 ### 2020 Census Tracts / Block Groups
 
-- **Services:** `public.gis.lacounty.gov/.../Demographics/MapServer/14` (tracts) and `MapServer/15` (block groups).
+- **Services:** [API Service](https://data.lacounty.gov/datasets/lacounty::2020-census-tracts-4/about) (tracts) and [API Service](https://data.lacounty.gov/maps/51f14a2885794cf2a487b5057f149086/about) (block groups).
 - **Filters applied:**
   - Tracts: spatial — only polygons whose envelope intersects the fire-perimeter envelope (EPSG:4326).
   - Block groups: attribute — `CT20 IN (<the CT20 values from the fetched tract set>)`. We do *not* re-apply the perimeter envelope to block groups: filtering by parent tract guarantees the block groups exactly partition the tracts (no orphan block groups whose parent tract was excluded, no stray groups from neighbouring tracts that happened to clip the perimeter envelope).

@@ -47,7 +47,7 @@ class OpenRouterProvider:
 
     def __init__(
         self,
-        model_id: str = "anthropic/claude-sonnet-4-6",
+        model_id: str = "anthropic/claude-haiku-4.5",
         *,
         api_key: str | None = None,
         timeout: float = _REQUEST_TIMEOUT,

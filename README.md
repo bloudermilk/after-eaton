@@ -19,6 +19,7 @@ The pipeline runs each weekday and uploads a fresh snapshot to a GitHub Release.
 | File | Contents |
 |---|---|
 | `parcels.geojson` | One feature per Altadena parcel with all derived fields. |
+| `parcels.csv` | Same per-parcel attributes as the GeoJSON, no geometry — for end-user download. |
 | `summary.json` | Burn-area-wide aggregate counts. |
 | `qc-report.json` | QC threshold pass/fail and per-parcel warnings. |
 | `2020-census-tracts.geojson` | One feature per 2020 census tract intersecting the fire perimeter, with the same counts as `summary.json` rolled up per tract. |
@@ -53,7 +54,7 @@ For the full attribute-level definition of every output field, including the reg
 
 ## Architecture
 
-The pipeline is a Python package (`after_eaton`) with one CLI entrypoint. The frontend (a Vue 3 + Vite SPA, planned) will fetch the released data files at runtime — there is no backend, no database, no user state. The two halves are fully decoupled.
+The pipeline is a Python package (`after_eaton`) with one CLI entrypoint. The frontend is a Vue 3 + Vite SPA deployed to GitHub Pages; it bundles the data assets at build time and serves everything same-origin. There is no backend, no database, no user state.
 
 For internal architecture, module layout, retry/QC logic, and operational notes, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 

@@ -64,11 +64,17 @@ def _zero_counts(total: int = 0) -> RegionCounts:
         lfl_count=0,
         nlfl_count=0,
         lfl_unknown_count=0,
-        sfr_larger_count=0,
-        sfr_identical_count=0,
-        sfr_smaller_count=0,
+        sfr_size_pct_smaller_over_30=0,
+        sfr_size_pct_smaller_10_to_30=0,
+        sfr_size_pct_within_10=0,
+        sfr_size_pct_larger_10_to_30=0,
+        sfr_size_pct_larger_over_30=0,
+        sfr_size_pct_unknown=0,
         sb9_count=0,
-        added_adu_count=0,
+        adu_added_1_count=0,
+        adu_added_2_count=0,
+        adu_added_3_plus_count=0,
+        dwelling_rebuild_count=0,
     )
 
 

@@ -11,6 +11,7 @@ from typing import Any, cast
 import click
 from dotenv import load_dotenv
 
+from .outputs.csv_writer import write_parcels_csv
 from .outputs.geojson_writer import write_parcels_geojson
 from .outputs.raw_writer import write_raw_records
 from .outputs.region_writer import write_regions_geojson
@@ -72,7 +73,7 @@ logger = logging.getLogger("after_eaton")
 )
 @click.option(
     "--llm-model",
-    default="anthropic/claude-sonnet-4-6",
+    default="anthropic/claude-haiku-4.5",
     show_default=True,
     help="OpenRouter routing string for the model.",
 )
@@ -243,6 +244,7 @@ def run(
     write_summary_json(summary, out_dir / "summary.json")
 
     write_parcels_geojson(pairs, out_dir / "parcels.geojson", generated_at=generated_at)
+    write_parcels_csv(results, out_dir / "parcels.csv")
 
     write_regions_geojson(
         tract_aggregation.features,

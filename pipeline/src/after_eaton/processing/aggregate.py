@@ -34,11 +34,28 @@ class RegionCounts:
     lfl_count: int
     nlfl_count: int
     lfl_unknown_count: int
-    sfr_larger_count: int
-    sfr_identical_count: int
-    sfr_smaller_count: int
+    # Relative SFR size, post-fire vs. pre-fire, by percentage bucket.
+    # Denominator = parcels with both pre_sfr_sqft and post_sfr_sqft known
+    # and pre_sfr_sqft > 0; everything else lands in `_unknown` for
+    # transparency. Cutoffs are exclusive at 10% (so ±10% is its own band)
+    # and inclusive at 30% on the wider bands.
+    sfr_size_pct_smaller_over_30: int
+    sfr_size_pct_smaller_10_to_30: int
+    sfr_size_pct_within_10: int
+    sfr_size_pct_larger_10_to_30: int
+    sfr_size_pct_larger_over_30: int
+    sfr_size_pct_unknown: int
     sb9_count: int
-    added_adu_count: int
+    # Distribution of parcels by how many ADUs they added relative to pre-fire.
+    # Parcels with added_adu_count == 0 are not in any of these buckets.
+    adu_added_1_count: int
+    adu_added_2_count: int
+    adu_added_3_plus_count: int
+    # Parcels rebuilding at least one SFR, ADU, or JADU. Used as a denominator
+    # for the share-of-dwelling-rebuilders charts on the home page. JADUs roll
+    # into post_adu_count via the LLM extraction (jadu→adu), so checking
+    # post_sfr_count and post_adu_count covers all three types in practice.
+    dwelling_rebuild_count: int
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -54,6 +71,27 @@ _DAMAGED_LEVELS = {
     DamageLevel.MAJOR,
     DamageLevel.DESTROYED,
 }
+
+
+def _sfr_size_bucket(parcel: ParcelResult) -> str:
+    pre = parcel.pre_sfr_sqft
+    post = parcel.post_sfr_sqft
+    if pre is None or post is None or pre <= 0:
+        return "unknown"
+    ratio = post / pre
+    # ±10% is inclusive on both ends; the smaller/larger bands begin at
+    # exactly 10% (exclusive) and the >30% bands begin at exactly 30%
+    # (exclusive). A parcel rebuilt at ratio 0.9 / 1.1 / 0.7 / 1.3 lands in
+    # the inner band of the pair.
+    if ratio < 0.7:
+        return "smaller_over_30"
+    if ratio < 0.9:
+        return "smaller_10_to_30"
+    if ratio <= 1.10:
+        return "within_10"
+    if ratio <= 1.30:
+        return "larger_10_to_30"
+    return "larger_over_30"
 
 
 def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
@@ -86,12 +124,27 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
         if p.lfl_claimed is None and p.rebuild_progress_num is not None
     )
 
-    sfr_larger = sum(1 for p in parcels if p.sfr_size_comparison == "larger")
-    sfr_identical = sum(1 for p in parcels if p.sfr_size_comparison == "identical")
-    sfr_smaller = sum(1 for p in parcels if p.sfr_size_comparison == "smaller")
+    size_buckets = {
+        "smaller_over_30": 0,
+        "smaller_10_to_30": 0,
+        "within_10": 0,
+        "larger_10_to_30": 0,
+        "larger_over_30": 0,
+        "unknown": 0,
+    }
+    for p in parcels:
+        size_buckets[_sfr_size_bucket(p)] += 1
 
     sb9 = sum(1 for p in parcels if p.adds_sb9)
-    added_adu = sum(1 for p in parcels if p.added_adu_count > 0)
+    adu_added_1 = sum(1 for p in parcels if p.added_adu_count == 1)
+    adu_added_2 = sum(1 for p in parcels if p.added_adu_count == 2)
+    adu_added_3_plus = sum(1 for p in parcels if p.added_adu_count >= 3)
+
+    dwelling_rebuild = sum(
+        1
+        for p in parcels
+        if (p.post_sfr_count or 0) > 0 or (p.post_adu_count or 0) > 0
+    )
 
     return RegionCounts(
         total_parcels=total,
@@ -109,11 +162,17 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
         lfl_count=lfl,
         nlfl_count=nlfl,
         lfl_unknown_count=lfl_unknown,
-        sfr_larger_count=sfr_larger,
-        sfr_identical_count=sfr_identical,
-        sfr_smaller_count=sfr_smaller,
+        sfr_size_pct_smaller_over_30=size_buckets["smaller_over_30"],
+        sfr_size_pct_smaller_10_to_30=size_buckets["smaller_10_to_30"],
+        sfr_size_pct_within_10=size_buckets["within_10"],
+        sfr_size_pct_larger_10_to_30=size_buckets["larger_10_to_30"],
+        sfr_size_pct_larger_over_30=size_buckets["larger_over_30"],
+        sfr_size_pct_unknown=size_buckets["unknown"],
         sb9_count=sb9,
-        added_adu_count=added_adu,
+        adu_added_1_count=adu_added_1,
+        adu_added_2_count=adu_added_2,
+        adu_added_3_plus_count=adu_added_3_plus,
+        dwelling_rebuild_count=dwelling_rebuild,
     )
 
 

@@ -52,7 +52,7 @@ The site is fully static. There is no backend, no database, and no user state. T
 ├── .github/
 │   └── workflows/
 │       ├── pipeline.yml          # scheduled data pipeline
-│       └── deploy.yml            # frontend build + Pages deploy (TODO: not yet committed)
+│       └── deploy.yml            # frontend build + Pages deploy
 ├── pipeline/                     # Python data processing
 │   ├── pyproject.toml
 │   ├── src/after_eaton/
@@ -65,7 +65,7 @@ The site is fully static. There is no backend, no database, and no user state. T
 │       ├── conftest.py           # auto-discovers QA fixtures
 │       ├── fixtures/qa/*.json    # hand-verified per-parcel regression cases
 │       └── test_*.py             # unit + integration tests
-├── web/                          # Vue 3 + Vite frontend (TODO: not yet started)
+├── web/                          # Vue 3 + Vite SPA
 ├── data/                         # local pipeline output (gitignored)
 ├── ARCHITECTURE.md               # this file
 ├── METHODOLOGY.md                # analytical methodology, attribute-level docs
@@ -137,6 +137,7 @@ For the analytical contract — what each derived field *means* — see [METHODO
 | `outputs/region_writer.py` | FeatureCollection writer for tract / block-group GeoJSONs. | `write_regions_geojson()` |
 | `outputs/summary_writer.py` | Dump `SummaryResult` as JSON. | `write_summary_json()` |
 | `outputs/raw_writer.py` | Snapshot raw fetched records to disk for reproducibility. | `write_raw_records()` |
+| `outputs/csv_writer.py` | Per-parcel CSV (`parcels.csv`): every `ParcelResult` field, no geometry, end-user friendly. | `write_parcels_csv()` |
 | `cli.py` | Click entrypoint; one `run()` command with `--out-dir`, `--log-level`, and LLM-extraction flags (`--llm-extraction`, `--llm-provider`, `--llm-model`, `--llm-cache-path`). Loads `.env` for local development. | `run()` |
 
 ### Sources
@@ -185,6 +186,7 @@ All outputs are written to `data/` locally and uploaded as Release assets in CI:
 | File | Format | Contents |
 |---|---|---|
 | `parcels.geojson` | GeoJSON FeatureCollection | One feature per Altadena parcel; attributes per `ParcelResult`. See METHODOLOGY.md for field-by-field semantics. |
+| `parcels.csv` | CSV | Same per-parcel attributes, no geometry. End-user-friendly download surfaced in the site footer. |
 | `summary.json` | JSON object | Burn-area totals (counts). |
 | `qc-report.json` | JSON object | Pass/fail of every threshold + every per-record warning that fired. |
 | `2020-census-tracts.geojson` | GeoJSON FeatureCollection | One feature per 2020 census tract intersecting the perimeter; attributes are identifiers (`ct20`, `label`) plus every `RegionCounts` field. |
@@ -236,10 +238,11 @@ Each successful pipeline run does two things:
 
 The dated releases are the historical record; `data-latest` is the stable URL the frontend depends on. Future releases may allow loading historical data.
 
-**Public URLs the frontend depends on (canonical):**
+**Public URLs of the canonical data assets:**
 
 ```
 https://github.com/bloudermilk/after-eaton/releases/download/data-latest/parcels.geojson
+https://github.com/bloudermilk/after-eaton/releases/download/data-latest/parcels.csv
 https://github.com/bloudermilk/after-eaton/releases/download/data-latest/summary.json
 https://github.com/bloudermilk/after-eaton/releases/download/data-latest/qc-report.json
 https://github.com/bloudermilk/after-eaton/releases/download/data-latest/2020-census-tracts.geojson
@@ -253,39 +256,44 @@ https://github.com/bloudermilk/after-eaton/releases/download/data-latest/source-
 
 We use the explicit `data-latest` tag rather than `/releases/latest/download/` because `latest` resolves by GitHub's own ordering rules (most recent non-prerelease) and could behave unexpectedly when a dated release and the rolling tag are both updated in the same run.
 
+The frontend does **not** fetch these URLs directly at runtime. The deploy workflow downloads `summary.json`, `qc-report.json`, and `parcels.csv` into `web/public/data/` at build time so the published site serves them same-origin from GitHub Pages — no CORS surface, no third-party runtime dependency. Because data is baked into the deploy, every successful pipeline run triggers a fresh deploy via the `workflow_run` event (see `.github/workflows/deploy.yml`).
+
 Retention: keep all dated releases indefinitely. They are small and provide an audit trail of how rebuild progress changed over time.
 
 ## Frontend
 
-Vue 3 + Vite, built as a static SPA. **TODO: not yet started.**
+Vue 3 + Vite + TypeScript, built as a static SPA and served from GitHub Pages.
 
-### Data loading (planned)
+### Routes
 
-On app load, fetch the data files from Releases:
+Hash-mode routing (`#/...`) sidesteps the GitHub Pages SPA-404 issue.
 
-- Send `If-None-Match` with cached `ETag` to leverage browser cache and Fastly conditional GETs.
-- Show a loading state while data fetches.
-- Show a stale-data banner if the embedded `generated_at` is more than 96 hours old.
-- On fetch failure, render a clear error state.
+- `#/` — homepage dashboard with four stats: Relative Size, Like-for-Like, Accessory Dwellings, SB-9. Each stat carries an info button explaining its methodology.
+- `#/methodology` — renders `METHODOLOGY.md` inline (`markdown-it` + `markdown-it-anchor`) with a sticky table of contents.
+- `#/quality-control` — pass/fail thresholds table plus the full per-record warnings table from `qc-report.json`.
 
-### Date display
+### Data loading
 
-The frontend prominently displays the data's `generated_at` date as a footer pill, e.g. "Data as of Mon Apr 27, 2026 PDT/PST".
+The site fetches `summary.json` and `qc-report.json` from same-origin (`./data/...` under the Pages base path) on app load:
 
-### Build and deploy (planned)
+- `useDataset()` is a module-scope composable so the fetch happens once and is shared across pages.
+- Shows a loading state while data fetches.
+- Shows a stale-data banner if the embedded `generated_at` is more than 96 hours old (formatted as "Data as of Mon Apr 27, 2026 PDT/PST" in the footer pill).
+- On fetch failure, renders a clear error state — in dev, the error includes a hint about running `npm run data:fetch-local` / `data:fetch-release`.
 
-```yaml
-# .github/workflows/deploy.yml
-on:
-  push:
-    branches: [main]
-    paths: ['web/**', '.github/workflows/deploy.yml']
-  workflow_dispatch: {}
-```
+`parcels.csv` is exposed as a direct download link in the footer (`./data/parcels.csv`).
 
-Build: `cd web && npm ci && npm run build`. Deploy `web/dist/` to GitHub Pages via `actions/deploy-pages`.
+### Build and deploy
 
-The frontend deploy is **independent of the data pipeline**. Data updates do not redeploy the frontend; the frontend re-fetches data on each page load.
+`.github/workflows/deploy.yml` deploys `web/dist/` to GitHub Pages via `actions/upload-pages-artifact` + `actions/deploy-pages`. Trigger conditions:
+
+1. **Push to `main`** touching `web/**`, `.github/workflows/deploy.yml`, or `METHODOLOGY.md` — frontend / methodology code changes.
+2. **Successful `pipeline` workflow run** (`workflow_run` event) — re-bake the bundled JSON / CSV after a data refresh.
+3. **Manual `workflow_dispatch`**.
+
+The build step runs `gh release download data-latest` to populate `web/public/data/` before `npm run build`, so the resulting `dist/` is self-contained — no third-party runtime fetches.
+
+**One-time manual setup:** in repo Settings → Pages, set the source to "GitHub Actions". `vite.config.ts` sets `base: '/after-eaton/'` for the project-page URL.
 
 ## Local development
 
@@ -340,7 +348,30 @@ Exit codes:
 
 ### Frontend
 
-**TODO: not yet started.**
+**Install (one-time):**
+
+```bash
+cd web
+npm install
+```
+
+**Run locally:**
+
+```bash
+npm run data:fetch-local      # copies ../data/*.json + parcels.csv → public/data/
+# or: npm run data:fetch-release   # mirrors what CI does, via the gh CLI
+npm run dev
+```
+
+`web/public/data/` is gitignored. If it's empty, the SPA shows the error state with a hint to run one of the data-fetch scripts. `scripts/copy-methodology.mjs` runs from `predev`/`prebuild` to copy `../METHODOLOGY.md` into `src/assets/methodology.md` (also gitignored), where it's imported via Vite's `?raw` loader.
+
+**Quality gates:**
+
+```bash
+npm run build              # vue-tsc + vite build (production)
+npx prettier --check .
+npx eslint .
+```
 
 ## Testing
 
@@ -444,8 +475,6 @@ gh workflow run deploy.yml
 
 ## Future work (not yet implemented)
 
-- `.github/workflows/deploy.yml` (frontend deploy is currently local-only).
-- Frontend (`web/`) — Vue 3 + Vite SPA.
 - Altagether-zone aggregates (boundary source undecided). Census-tract and census-block-group aggregates ship as `2020-census-tracts.geojson` / `2020-census-block-groups.geojson` alongside the burn-area `summary.json`.
 - Pipeline-failure webhook alerting.
 - Geometry drop-rate gate.

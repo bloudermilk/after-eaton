@@ -1,0 +1,6 @@
+node_modules/
+dist/
+public/data/
+src/assets/methodology.md
+.DS_Store
+*.log
