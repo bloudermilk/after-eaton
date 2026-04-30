@@ -16,7 +16,7 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
 
@@ -28,12 +28,12 @@ jobs:
         working-directory: pipeline
         run: pip install -e .
 
-      - name: Restore LLM extraction cache from data-latest
+      - name: Restore LLM extraction cache from llm-cache-latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p data
-          gh release download data-latest \
+          gh release download llm-cache-latest \
             --pattern llm-extraction-cache.json \
             --dir data \
             --clobber || echo "no existing cache asset; pipeline will start with an empty cache"
@@ -43,6 +43,18 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: after-eaton --out-dir ../data --log-level INFO
+
+      - name: Persist LLM cache (always, even on pipeline failure)
+        if: always() && hashFiles('data/llm-extraction-cache.json') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release view llm-cache-latest >/dev/null 2>&1 \
+            || gh release create llm-cache-latest \
+                --title "llm-cache-latest" \
+                --notes "Internal pipeline build cache. Not part of the published data contract; do not consume from frontends."
+          gh release upload llm-cache-latest data/llm-extraction-cache.json --clobber
 
       - name: Publish releases
         env:
@@ -62,7 +74,6 @@ jobs:
             data/source-fire-perimeter.json
             data/source-2020-census-tracts.json
             data/source-2020-census-block-groups.json
-            data/llm-extraction-cache.json
           )
 
           gh release view "$tag" >/dev/null 2>&1 \

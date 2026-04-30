@@ -176,7 +176,10 @@ def run(
         logger.warning("LLM extraction disabled: %s", llm_disabled_reason)
 
     results, llm_warnings, run_info = _analyze_all(
-        joined, provider=provider, cache=extraction_cache
+        joined,
+        provider=provider,
+        cache=extraction_cache,
+        cache_path=cache_path,
     )
     pairs = [(r, jp.din) for jp, r in zip(joined, results, strict=True)]
 
@@ -277,9 +280,14 @@ def _analyze_all(
     *,
     provider: OpenRouterProvider | None,
     cache: ExtractionCache,
+    cache_path: Path,
 ) -> tuple[list[ParcelResult], list[RecordWarning], ExtractionRunInfo]:
     """Run analyze_parcel on each joined parcel; if a provider is given, run
-    LLM extraction in parallel and overlay its result."""
+    LLM extraction in parallel and overlay its result.
+
+    The cache is flushed atomically to ``cache_path`` after every cache miss,
+    so a hard kill cannot lose completed extractions.
+    """
     results: list[ParcelResult] = []
     warnings: list[RecordWarning] = []
     parcels_attempted = 0
@@ -333,6 +341,7 @@ def _analyze_all(
         parcels_extracted += 1
         if len(cache.entries) > cache_size_before:
             cache_misses += 1
+            save_cache(cache_path, cache)
         else:
             cache_hits += 1
 

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import cast
 
 from after_eaton.cli import _analyze_all
 from after_eaton.processing.join import JoinedParcel
-from after_eaton.processing.llm_extraction import ExtractionCache
+from after_eaton.processing.llm_extraction import ExtractionCache, load_cache
 from after_eaton.processing.llm_provider import LLMResponse, OpenRouterProvider
 from after_eaton.sources.schemas import DinsParcel, EpicCase
 
@@ -80,7 +81,7 @@ def _llm_response_for_two_units() -> LLMResponse:
     )
 
 
-def test_analyze_all_no_provider_runs_regex_only() -> None:
+def test_analyze_all_no_provider_runs_regex_only(tmp_path: Path) -> None:
     joined = [
         JoinedParcel(
             din=_din(),
@@ -88,7 +89,9 @@ def test_analyze_all_no_provider_runs_regex_only() -> None:
         )
     ]
     cache = ExtractionCache()
-    results, warnings, info = _analyze_all(joined, provider=None, cache=cache)
+    results, warnings, info = _analyze_all(
+        joined, provider=None, cache=cache, cache_path=tmp_path / "cache.json"
+    )
 
     assert len(results) == 1
     assert info.enabled is False
@@ -99,7 +102,7 @@ def test_analyze_all_no_provider_runs_regex_only() -> None:
     assert warnings == []  # _analyze_all only yields LLM-related warnings
 
 
-def test_analyze_all_with_provider_overrides_post_fields() -> None:
+def test_analyze_all_with_provider_overrides_post_fields(tmp_path: Path) -> None:
     joined = [
         JoinedParcel(
             din=_din(),
@@ -112,7 +115,10 @@ def test_analyze_all_with_provider_overrides_post_fields() -> None:
     provider = _stub_provider(lambda _s, _u: _llm_response_for_two_units())
 
     cache = ExtractionCache()
-    results, warnings, info = _analyze_all(joined, provider=provider, cache=cache)
+    cache_path = tmp_path / "cache.json"
+    results, warnings, info = _analyze_all(
+        joined, provider=provider, cache=cache, cache_path=cache_path
+    )
 
     assert len(results) == 1
     result = results[0]
@@ -130,13 +136,16 @@ def test_analyze_all_with_provider_overrides_post_fields() -> None:
     assert info.cache_hits == 0
     # Cache populated:
     assert len(cache.entries) == 1
+    # Cache flushed to disk on the miss (mid-run persistence).
+    on_disk = load_cache(cache_path)
+    assert len(on_disk.entries) == 1
     # Regex extracted only one structure (parser is deterministic), so LLM's
     # second structure should produce a count_disagreement warning for ADU.
     codes = [w.code for w in warnings]
     assert "extraction_count_disagreement" in codes
 
 
-def test_analyze_all_failure_falls_back_to_regex() -> None:
+def test_analyze_all_failure_falls_back_to_regex(tmp_path: Path) -> None:
     joined = [
         JoinedParcel(
             din=_din(),
@@ -148,16 +157,21 @@ def test_analyze_all_failure_falls_back_to_regex() -> None:
     )
 
     cache = ExtractionCache()
-    results, warnings, info = _analyze_all(joined, provider=provider, cache=cache)
+    cache_path = tmp_path / "cache.json"
+    results, warnings, info = _analyze_all(
+        joined, provider=provider, cache=cache, cache_path=cache_path
+    )
 
     assert len(results) == 1
     assert results[0].post_sfr_sqft == 1949  # regex result preserved
     assert info.parcels_failed == 1
     assert info.parcels_extracted == 0
     assert any(w.code == "llm_extraction_failed" for w in warnings)
+    # Failure path doesn't mutate the cache, so no file is written.
+    assert not cache_path.exists()
 
 
-def test_analyze_all_skips_parcels_without_qualifying_records() -> None:
+def test_analyze_all_skips_parcels_without_qualifying_records(tmp_path: Path) -> None:
     """A parcel with no qualifying records (no PermitManagement-New or
     PlanManagement-Rebuild) should not be sent to the LLM."""
     joined = [
@@ -172,12 +186,14 @@ def test_analyze_all_skips_parcels_without_qualifying_records() -> None:
 
     provider = _stub_provider(must_not_be_called)
     cache = ExtractionCache()
-    results, warnings, info = _analyze_all(joined, provider=provider, cache=cache)
+    results, warnings, info = _analyze_all(
+        joined, provider=provider, cache=cache, cache_path=tmp_path / "cache.json"
+    )
     assert len(results) == 1
     assert info.parcels_attempted == 0
 
 
-def test_analyze_all_treats_plan_only_parcel_as_plan_only() -> None:
+def test_analyze_all_treats_plan_only_parcel_as_plan_only(tmp_path: Path) -> None:
     """A parcel with only a PlanManagement record (no PermitManagement) should
     be sent to the LLM and counted as plan_only."""
     plan_record = cast(
@@ -197,7 +213,9 @@ def test_analyze_all_treats_plan_only_parcel_as_plan_only() -> None:
     joined = [JoinedParcel(din=_din(), cases=[plan_record])]
     provider = _stub_provider(lambda _s, _u: _llm_response_for_two_units())
     cache = ExtractionCache()
-    results, warnings, info = _analyze_all(joined, provider=provider, cache=cache)
+    results, warnings, info = _analyze_all(
+        joined, provider=provider, cache=cache, cache_path=tmp_path / "cache.json"
+    )
 
     assert info.parcels_attempted == 1
     assert info.parcels_extracted == 1

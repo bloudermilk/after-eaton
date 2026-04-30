@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 from after_eaton.processing.llm_extraction import (
     ExtractedStructure,
@@ -228,3 +231,84 @@ def test_cache_key_match_is_what_drives_cache_hit() -> None:
     k1 = parcel_cache_key(ctx.ain, records, model_id="m", prompt_version=PROMPT_VERSION)
     k2 = parcel_cache_key(ctx.ain, records, model_id="m", prompt_version=PROMPT_VERSION)
     assert k1 == k2
+
+
+def _entry(key: str, ain: str) -> LLMExtraction:
+    return LLMExtraction(
+        key=key,
+        ain=ain,
+        extracted_at="2026-04-29T00:00:00Z",
+        model="m",
+        prompt_version=PROMPT_VERSION,
+        input_case_numbers=(),
+        structures=(),
+        reasoning="",
+        input_tokens=0,
+        output_tokens=0,
+    )
+
+
+def test_save_cache_leaves_no_tmp_file(tmp_path: Path) -> None:
+    """Atomic write: the .tmp sibling does not linger after a successful save."""
+    path = tmp_path / "cache.json"
+    cache = ExtractionCache(entries={"k1": _entry("k1", "A")})
+    save_cache(path, cache)
+    assert path.exists()
+    assert not (tmp_path / "cache.json.tmp").exists()
+    siblings = list(tmp_path.iterdir())
+    assert len(siblings) == 1, f"expected only cache.json, found {siblings}"
+
+
+def test_save_cache_preserves_original_on_write_failure(tmp_path: Path) -> None:
+    """If the temp write blows up, the previously-saved file is untouched."""
+    path = tmp_path / "cache.json"
+    save_cache(path, ExtractionCache(entries={"k1": _entry("k1", "A")}))
+    original_bytes = path.read_bytes()
+
+    bigger = ExtractionCache(entries={"k1": _entry("k1", "A"), "k2": _entry("k2", "B")})
+
+    real_write_text = Path.write_text
+
+    def boom(self: Path, *args: object, **kwargs: object) -> int:
+        if self.suffix == ".tmp":
+            raise OSError("disk full")
+        return real_write_text(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    with patch.object(Path, "write_text", boom):
+        with pytest.raises(OSError, match="disk full"):
+            save_cache(path, bigger)
+
+    # Original file content untouched (atomic-rename semantics).
+    assert path.read_bytes() == original_bytes
+    reloaded = load_cache(path)
+    assert set(reloaded.entries.keys()) == {"k1"}
+
+
+def test_extract_structures_caller_can_persist_after_each_miss(tmp_path: Path) -> None:
+    """Simulate a mid-run crash: persist after each cache miss, then 'kill' and
+    reload — completed extractions survive."""
+    path = tmp_path / "cache.json"
+    cache = ExtractionCache()
+
+    def fake_extract(_s: str, _u: str) -> LLMResponse:
+        return LLMResponse(_good_response_content(), 100, 30)
+
+    provider = _stub_provider(fake_extract)
+
+    out1 = extract_structures(
+        _ctx("AIN-A"), [_record(case="A")], provider=provider, cache=cache
+    )
+    assert out1 is not None
+    save_cache(path, cache)  # caller saves after the miss
+
+    out2 = extract_structures(
+        _ctx("AIN-B"), [_record(case="B")], provider=provider, cache=cache
+    )
+    assert out2 is not None
+    save_cache(path, cache)
+
+    # Drop the in-memory cache (simulate process death) and reload from disk.
+    del cache
+    reloaded = load_cache(path)
+    assert len(reloaded.entries) == 2
+    assert {e.ain for e in reloaded.entries.values()} == {"AIN-A", "AIN-B"}

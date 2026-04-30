@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -90,7 +91,11 @@ def load_cache(path: Path | str) -> ExtractionCache:
 
 
 def save_cache(path: Path | str, cache: ExtractionCache) -> None:
-    """Write the cache as a single JSON object; safe to upload as a release asset."""
+    """Write the cache as a single JSON object via atomic write-temp-then-rename.
+
+    Called after every cache miss during a run, so a hard kill (OOM, SIGKILL, CI
+    timeout) cannot lose completed extractions or corrupt the file mid-write.
+    """
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -99,7 +104,9 @@ def save_cache(path: Path | str, cache: ExtractionCache) -> None:
         "entry_count": len(cache.entries),
         "entries": [_entry_to_dict(e) for e in cache.entries.values()],
     }
-    p.write_text(json.dumps(payload, indent=2, sort_keys=False))
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=False))
+    os.replace(tmp, p)
 
 
 def prune_cache(cache: ExtractionCache, valid_ains: set[str]) -> int:

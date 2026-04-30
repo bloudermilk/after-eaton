@@ -39,6 +39,8 @@ For project overview and data source descriptions, see [README.md](./README.md).
 │    source-fire-perimeter.json              │
 │    source-2020-census-tracts.json          │
 │    source-2020-census-block-groups.json    │
+│                                            │
+│  - llm-cache-latest (internal, rolling)    │
 │    llm-extraction-cache.json               │
 └────────────────────────────────────────────┘
 ```
@@ -196,7 +198,8 @@ All outputs are written to `data/` locally and uploaded as Release assets in CI:
 | `source-fire-perimeter.json` | JSON object | Raw Eaton Fire perimeter polygon(s) (same envelope). |
 | `source-2020-census-tracts.json` | JSON object | Raw 2020 census tract polygons within the perimeter envelope (same envelope). |
 | `source-2020-census-block-groups.json` | JSON object | Raw 2020 census block group polygons within the perimeter envelope (same envelope). |
-| `llm-extraction-cache.json` | JSON object | Per-parcel LLM extractions keyed deterministically on record content + provider + model + prompt version. Restored at the start of the next CI run so steady-state pipeline cost is bounded by the daily delta of changed records. |
+
+The LLM extraction cache (`llm-extraction-cache.json`) is **not** part of the published-data contract — see [LLM extraction cache](#llm-extraction-cache) below.
 
 Every output carries a `generated_at` ISO 8601 timestamp:
 - `summary.json`, `qc-report.json`, `source-dins.json`, `source-epicla.json`, `source-fire-perimeter.json`, `source-2020-census-tracts.json`, `source-2020-census-block-groups.json`: top-level field (`fetched_at` on raw source files)
@@ -259,6 +262,25 @@ We use the explicit `data-latest` tag rather than `/releases/latest/download/` b
 The frontend does **not** fetch these URLs directly at runtime. The deploy workflow downloads `summary.json`, `qc-report.json`, and `parcels.csv` into `web/public/data/` at build time so the published site serves them same-origin from GitHub Pages — no CORS surface, no third-party runtime dependency. Because data is baked into the deploy, every successful pipeline run triggers a fresh deploy via the `workflow_run` event (see `.github/workflows/deploy.yml`).
 
 Retention: keep all dated releases indefinitely. They are small and provide an audit trail of how rebuild progress changed over time.
+
+### LLM extraction cache
+
+`llm-extraction-cache.json` lives in a separate, internal release tag — **`llm-cache-latest`** — not in `data-latest` or `data-YYYY-MM-DD`. The frontend never fetches it; it is a build artifact that lets repeat pipeline runs avoid re-paying for LLM calls whose inputs (sources + prompt + model) have not changed.
+
+Operational invariants:
+
+- **Incremental persistence.** `cli.py:_analyze_all` flushes the cache atomically (write-temp-then-`os.replace`) after every cache miss. A SIGKILL, OOM, or runner timeout mid-loop preserves every completed extraction.
+- **Always upload, success or failure.** The `Persist LLM cache` step in `pipeline.yml` runs with `if: always()`, so a failed pipeline still propagates its partial cache forward — the next run resumes where the previous one died.
+- **Single rolling tag, no history.** Cache contents are reproducible from sources + `PROMPT_VERSION` + model, so historical snapshots have no audit value. We keep only `llm-cache-latest`.
+- **Bootstrap.** After the first local full run, upload the produced cache to the tag once:
+  ```bash
+  gh release create llm-cache-latest \
+      --title "llm-cache-latest" \
+      --notes "Internal pipeline build cache. Not part of the published data contract; do not consume from frontends." || true
+  gh release upload llm-cache-latest data/llm-extraction-cache.json --clobber
+  ```
+
+The job's 6-hour `timeout-minutes: 360` is sized to accommodate a future cold run (e.g. after a `PROMPT_VERSION` bump invalidates every entry) without being chopped. Steady-state daily runs finish in minutes — incremental delta only.
 
 ## Frontend
 
