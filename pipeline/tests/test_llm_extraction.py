@@ -171,7 +171,7 @@ def test_save_and_load_round_trip(tmp_path: Path) -> None:
     loaded = load_cache(path)
     assert loaded.entries[extraction.key] == extraction
     payload = json.loads(path.read_text())
-    assert payload["prompt_version"] == 1
+    assert payload["prompt_version"] == PROMPT_VERSION
     assert len(payload["entries"]) == 1
     assert payload["entries"][0]["input_case_numbers"] == ["UNC-A", "UNC-B"]
 

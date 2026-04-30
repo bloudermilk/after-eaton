@@ -11,6 +11,7 @@ from .description_parser import (
     ParsedStructure,
     StructType,
     extract_lfl_claim,
+    mentions_sb9,
     parse_description,
 )
 from .join import JoinedParcel
@@ -56,8 +57,6 @@ class ParcelResult:
     post_adu_sqft: int | None
     post_mfr_count: int | None
     post_mfr_sqft: int | None
-    post_sb9_count: int | None
-    post_sb9_sqft: int | None
     # Rebuild characterization
     lfl_claimed: bool | None
     # True when fire cases produced two or more distinct LFL/Custom signals
@@ -88,7 +87,7 @@ def analyze_parcel(joined: JoinedParcel) -> ParcelResult:
     lfl_claimed, lfl_conflict = _resolve_lfl(fire_cases)
 
     sfr_cmp = _compare_sfr(pre.sfr_sqft, post.sfr_sqft)
-    adds_sb9 = bool(post.sb9_count and post.sb9_count > 0)
+    adds_sb9 = _detect_sb9(fire_cases)
     added_adu_count = max(0, (post.adu_count or 0) - pre.adu_count)
 
     return ParcelResult(
@@ -109,8 +108,6 @@ def analyze_parcel(joined: JoinedParcel) -> ParcelResult:
         post_adu_sqft=post.adu_sqft,
         post_mfr_count=post.mfr_count,
         post_mfr_sqft=post.mfr_sqft,
-        post_sb9_count=post.sb9_count,
-        post_sb9_sqft=post.sb9_sqft,
         lfl_claimed=lfl_claimed,
         lfl_conflict=lfl_conflict,
         sfr_size_comparison=sfr_cmp,
@@ -146,8 +143,6 @@ class PostFire:
     adu_sqft: int | None
     mfr_count: int | None
     mfr_sqft: int | None
-    sb9_count: int | None
-    sb9_sqft: int | None
 
 
 def analyze_pre_fire(din: DinsParcel) -> PreFire:
@@ -253,6 +248,18 @@ def filter_fire_cases(cases: list[EpicCase]) -> list[EpicCase]:
     return fire
 
 
+def _detect_sb9(cases: list[EpicCase]) -> bool:
+    """True iff any case mentions SB-9 in DESCRIPTION, PROJECT_NAME, or PROJECTNAME."""
+    for c in cases:
+        if (
+            mentions_sb9(c.get("DESCRIPTION"))
+            or mentions_sb9(c.get("PROJECT_NAME"))
+            or mentions_sb9(c.get("PROJECTNAME"))
+        ):
+            return True
+    return False
+
+
 def _max_progress(cases: list[EpicCase]) -> int | None:
     nums: list[int] = []
     for c in cases:
@@ -300,7 +307,7 @@ def select_qualifying_records(cases: list[EpicCase]) -> list[EpicCase]:
 
 def _analyze_post_fire(primary: EpicCase | None) -> PostFire:
     if primary is None:
-        return PostFire(None, None, None, None, None, None, None, None)
+        return PostFire(None, None, None, None, None, None)
 
     structures = parse_description(primary.get("DESCRIPTION"))
 
@@ -317,7 +324,6 @@ def _analyze_post_fire(primary: EpicCase | None) -> PostFire:
     sfr_n, sfr_sq = bucket("sfr")
     adu_n, adu_sq = bucket("adu")
     mfr_n, mfr_sq = bucket("mfr")
-    sb9_n, sb9_sq = bucket("sb9")
 
     return PostFire(
         sfr_count=sfr_n,
@@ -326,8 +332,6 @@ def _analyze_post_fire(primary: EpicCase | None) -> PostFire:
         adu_sqft=adu_sq,
         mfr_count=mfr_n,
         mfr_sqft=mfr_sq,
-        sb9_count=sb9_n,
-        sb9_sqft=sb9_sq,
     )
 
 

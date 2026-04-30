@@ -19,7 +19,7 @@ from .parcel_analysis import ParcelResult, PostFire, SfrSizeComparison
 
 _IDENTICAL_TOLERANCE = 10  # sqft — must match parcel_analysis._IDENTICAL_TOLERANCE
 
-_RESIDENTIAL_TYPES = ("sfr", "adu", "sb9", "mfr")
+_RESIDENTIAL_TYPES = ("sfr", "adu", "mfr")
 _SQFT_DISAGREEMENT_RATIO = 0.10  # > 10% delta = flag as sqft disagreement
 
 
@@ -48,8 +48,6 @@ def override_with_llm(
             adu_sqft=result.post_adu_sqft,
             mfr_count=result.post_mfr_count,
             mfr_sqft=result.post_mfr_sqft,
-            sb9_count=result.post_sb9_count,
-            sb9_sqft=result.post_sb9_sqft,
         )
         if has_qualifying_permit
         else None
@@ -58,6 +56,9 @@ def override_with_llm(
         regex_post_for_compare, llm_post, extraction=extraction
     )
 
+    # adds_sb9 is sourced from text detection in parcel_analysis.py and is
+    # independent of which extraction path produced post_* counts; leave it
+    # alone in the override.
     new_result = dataclasses.replace(
         result,
         post_sfr_count=llm_post.sfr_count,
@@ -66,9 +67,6 @@ def override_with_llm(
         post_adu_sqft=llm_post.adu_sqft,
         post_mfr_count=llm_post.mfr_count,
         post_mfr_sqft=llm_post.mfr_sqft,
-        post_sb9_count=llm_post.sb9_count,
-        post_sb9_sqft=llm_post.sb9_sqft,
-        adds_sb9=bool(llm_post.sb9_count and llm_post.sb9_count > 0),
         added_adu_count=max(0, (llm_post.adu_count or 0) - result.pre_adu_count),
         sfr_size_comparison=_compare_sfr(result.pre_sfr_sqft, llm_post.sfr_sqft),
     )
@@ -101,7 +99,7 @@ def derive_post_from_llm(extraction: LLMExtraction) -> PostFire:
     """Bucket an LLMExtraction's structures into the existing PostFire shape.
 
     Counts each residential structure once; sums sqft within type. Only the
-    residential types (sfr/adu/sb9/mfr) flow through; garage/repair/other
+    residential types (sfr/adu/mfr) flow through; garage/repair/other
     structures the LLM identifies are dropped here (they don't map onto the
     output schema).
     """
@@ -124,8 +122,6 @@ def derive_post_from_llm(extraction: LLMExtraction) -> PostFire:
         adu_sqft=sum(sqfts["adu"]) if sqfts["adu"] else None,
         mfr_count=counts["mfr"],
         mfr_sqft=sum(sqfts["mfr"]) if sqfts["mfr"] else None,
-        sb9_count=counts["sb9"],
-        sb9_sqft=sum(sqfts["sb9"]) if sqfts["sb9"] else None,
     )
 
 

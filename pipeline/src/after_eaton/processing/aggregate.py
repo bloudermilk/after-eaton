@@ -141,9 +141,7 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
     adu_added_3_plus = sum(1 for p in parcels if p.added_adu_count >= 3)
 
     dwelling_rebuild = sum(
-        1
-        for p in parcels
-        if (p.post_sfr_count or 0) > 0 or (p.post_adu_count or 0) > 0
+        1 for p in parcels if (p.post_sfr_count or 0) > 0 or (p.post_adu_count or 0) > 0
     )
 
     return RegionCounts(

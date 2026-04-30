@@ -38,8 +38,6 @@ def _make(
         post_adu_sqft=None,
         post_mfr_count=None,
         post_mfr_sqft=None,
-        post_sb9_count=None,
-        post_sb9_sqft=None,
         lfl_claimed=lfl_claimed,
         lfl_conflict=False,
         sfr_size_comparison=sfr_size_comparison,  # type: ignore[arg-type]
@@ -132,15 +130,13 @@ def test_sfr_size_buckets_boundary() -> None:
         _make(
             ain="a2", pre_sfr_sqft=1000, post_sfr_sqft=700
         ),  # 0.70 → smaller_10_to_30
-        _make(ain="b", pre_sfr_sqft=1000, post_sfr_sqft=899),  # 0.899 → smaller_10_to_30
+        _make(
+            ain="b", pre_sfr_sqft=1000, post_sfr_sqft=899
+        ),  # 0.899 → smaller_10_to_30
         _make(ain="c", pre_sfr_sqft=1000, post_sfr_sqft=900),  # 0.90 → within_10
         _make(ain="d", pre_sfr_sqft=1000, post_sfr_sqft=1100),  # 1.10 → within_10
-        _make(
-            ain="e", pre_sfr_sqft=1000, post_sfr_sqft=1110
-        ),  # 1.11 → larger_10_to_30
-        _make(
-            ain="f", pre_sfr_sqft=1000, post_sfr_sqft=1300
-        ),  # 1.30 → larger_10_to_30
+        _make(ain="e", pre_sfr_sqft=1000, post_sfr_sqft=1110),  # 1.11 → larger_10_to_30
+        _make(ain="f", pre_sfr_sqft=1000, post_sfr_sqft=1300),  # 1.30 → larger_10_to_30
         _make(ain="g", pre_sfr_sqft=1000, post_sfr_sqft=1310),  # 1.31 → larger_over_30
         _make(ain="h", pre_sfr_sqft=0, post_sfr_sqft=1000),  # zero pre → unknown
     ]

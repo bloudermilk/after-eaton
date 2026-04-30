@@ -7,6 +7,10 @@ bumping so downstream readers know what changed.
 History:
 - v1: initial prompt covering plan + permit records, structure-level dedup,
   worked example for floor-label rule (AIN 5845016021 → 4 ADUs).
+- v2: SB-9 modeled as a permitting pathway, not a structure type. Removed
+  "sb9" from struct_type enum; added guidance that SB-9-described units are
+  primary dwellings (sfr) under SB-9 entitlement and that any SB-9 mention
+  on the parcel is a heuristic for multiple primary dwellings.
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ from datetime import UTC, datetime
 
 from ..sources.schemas import EpicCase
 
-PROMPT_VERSION = 1
+PROMPT_VERSION = 2
 
 _REBUILD_PROGRESS_LABELS: dict[int, str] = {
     1: "Plans Submitted",
@@ -42,6 +46,11 @@ For one structure, both a plan record and a permit record may exist (the plan is
 
 DEFINITION OF A STRUCTURE
 A "structure" for our purposes is one independently-habitable dwelling unit, each of which would receive its own street address. Two ADUs stacked in one physical building (each with its own kitchen, bathroom, bedroom set) count as TWO structures, not one. A two-story SFR with a single kitchen on the ground floor and bedrooms upstairs is ONE structure.
+
+SB-9 IS A PATHWAY, NOT A STRUCTURE TYPE
+California's SB-9 is a permitting pathway that lets a single parcel build more than one primary dwelling (typically up to two SFRs without a lot split, or more with one), plus ADUs/JADUs as separately allowed. A description that says "SB9 unit" or "1107 SF SB9 (2 BR / 2 BA)" is describing an SFR being built under SB-9 entitlement — classify it as "sfr". A description that says "SB9 ADU" is describing an ADU built under SB-9 — classify it as "adu".
+
+If any record on this parcel mentions SB-9, treat it as a HEURISTIC that the parcel is likely building MULTIPLE PRIMARY DWELLINGS. Use that signal when interpreting ambiguous structure descriptions: e.g., if a numbered-list description shows "1. NEW 2-STORY 1107 SF SB9 ... 2. NEW 2-STORY 1115 SF SFR ...", that is two SFRs on one parcel (count=2), not one SFR.
 
 DEDUP RULES (apply in order)
 
@@ -77,7 +86,7 @@ OUTPUT FORMAT (JSON, no prose)
 {
   "structures": [
     {
-      "struct_type": "sfr" | "adu" | "jadu" | "sb9" | "mfr" | "garage" | "repair" | "other",
+      "struct_type": "sfr" | "adu" | "jadu" | "mfr" | "garage" | "repair" | "other",
       "sqft": <integer or null>,
       "confidence": "high" | "medium" | "low",
       "evidence_case_numbers": ["UNC-...", ...],

@@ -239,7 +239,7 @@ Real example (one parcel, four structures):
 4. EATON FIRE REBUILD - NEW 2-STORY 1110 SF ADU
 ```
 
-This produces four `ParsedStructure` records: `(sb9, 1107)`, `(sfr, 1115)`, `(adu, 1110)`, `(adu, 1110)`.
+This produces four `ParsedStructure` records: `(sfr, 1107)`, `(sfr, 1115)`, `(adu, 1110)`, `(adu, 1110)` — the first segment's bare "SB9" classifies as `sfr` via the SB-9 fallback (see Step 2). SB-9 is captured separately as a parcel-level pathway flag, not as a structure type.
 
 ### Step 2 — Per-segment structure classification
 
@@ -250,26 +250,27 @@ Each segment is classified into one of these types:
 | `sfr` | `\bSF[RDH]\b`, `\bSINGLE[\s-]+FAMIL` (matches "SFR", "SFD", "SFH", "SINGLE FAMILY"/"SINGLE-FAMILY") | Yes |
 | `adu` | `\bADUS?\b`, `\bACCESSORY\s+DWELL` (matches "ADU", "ADUS", "ACCESSORY DWELLING") | Yes |
 | `jadu` | `\bJADUS?\b`, `\bJUNIOR\s+ADU` | Yes |
-| `sb9` | `\bSB[\- ]?9\b`, `\bSENATE\s+BILL\s*9` | Yes |
 | `mfr` | `\bDUPLEX\b`, `\bTRIPLEX\b`, `\bMFR\b`, `\bMULTI[\s-]*FAMIL`, `\bCONDO\s+UNIT` | Yes |
 | `garage` | `\bGARAGE\b`, `\bCARPORT\b` | No |
 | `temporary_housing` | `\bTEMP(?:\.\|ORARY)?\s+HOUSING`, `\b(RV\|MOTOR\s+HOME\|TRAILER\|CAMPER)\b` | No |
 | `repair` | `\bREPAIR\b`, `\bALTERATION\b`, `\bREPLACE\b`, `\bRENOVAT…`, `\bRESTORATION\b`, `\bREMODEL\b`, `\bTENANT\s+IMPROV` | No |
 | `retaining_wall` | `\bRETAINING\s+WALL`, `\bCMU\s+WALL`, `\b(LANDSCAPING\|GRADING)\b` | No |
 | `seismic` | `\bSEISMIC\s+(RETROFIT\|UPGRADE\|REROFIT)` | No |
-| `unknown` | none of the above match | No |
+| `unknown` | none of the above match and no SB-9 fallback applies | No |
+
+SB-9 (`\bSB[\- ]?9\b`, `\bSENATE\s+BILL\s*9`) is **not** a structure type — it's a California permitting pathway captured at the parcel level (see [`adds_sb9`](#adds_sb9)). Within a single segment it acts as a classification fallback only: a segment that mentions SB-9 but no other type keyword (e.g. "1107 SF SB9 (2 BR / 2 BA) WITH ATTACHED GARAGE") classifies as `sfr`, since a bare SB-9 unit is virtually always a primary dwelling. A positive type match (sfr/adu/jadu/mfr) always beats the SB-9 fallback — a "SB9 ADU" is still an `adu`.
 
 When more than one keyword matches the same segment, we use a **three-tier priority** rule:
 
-- **Tier 1 (residential primary):** sb9, jadu, adu, sfr, mfr
+- **Tier 1 (residential primary):** jadu, adu, sfr, mfr
 - **Tier 2 (secondary structure):** garage
 - **Tier 3 (non-structural):** temporary_housing, repair, retaining_wall, seismic
 
-We pick the earliest match in the highest-priority tier with any match. This is the rule that makes `"WITH 524 SF ATTACHED GARAGE WITH 270 SF REAR PATIO WITH … 3,484 SF SINGLE FAMILY RESIDENCE"` classify as `sfr` even though `GARAGE` appears first — `sfr` is in tier 1 and `garage` in tier 2.
+We pick the earliest match in the highest-priority tier with any match. The SB-9 fallback runs **between** Tier 1 and Tier 2 — so a SB-9-entitled primary dwelling described with attached-garage clauses still classifies as `sfr`, not `garage`. This is the rule that makes `"WITH 524 SF ATTACHED GARAGE WITH 270 SF REAR PATIO WITH … 3,484 SF SINGLE FAMILY RESIDENCE"` classify as `sfr` even though `GARAGE` appears first — `sfr` is in tier 1 and `garage` in tier 2.
 
 Within tier 1, we use earliest position. So `"REBUILD-ADU- 1-STORY 800 SF SFD"` classifies as `adu` (ADU appears before SFD), correctly recognizing that the SFD is descriptor for the ADU.
 
-Source: `pipeline/src/after_eaton/processing/description_parser.py:_TIERS`, `_parse_segment`.
+Source: `pipeline/src/after_eaton/processing/description_parser.py:_T1_PRIMARY`, `_parse_segment`.
 
 ### Step 3 — Per-segment square-foot extraction
 
@@ -286,10 +287,9 @@ Source: `pipeline/src/after_eaton/processing/description_parser.py:_SQFT_RE`, `_
 
 We group segments by type and sum sqft within each group:
 
-- `post_sfr_count`, `post_sfr_sqft` — count and summed sqft of `sfr` segments.
+- `post_sfr_count`, `post_sfr_sqft` — count and summed sqft of `sfr` segments (including SB-9-entitled primary dwellings, which roll into `sfr` via the fallback).
 - `post_adu_count`, `post_adu_sqft` — same for `adu` (note: `jadu` is classified separately and not folded into `adu`).
 - `post_mfr_count`, `post_mfr_sqft` — same for `mfr`.
-- `post_sb9_count`, `post_sb9_sqft` — same for `sb9`.
 
 `garage`, `temporary_housing`, `repair`, `retaining_wall`, `seismic`, and `unknown` segments are recognized for QC purposes but do not contribute to dwelling counts.
 
@@ -350,7 +350,9 @@ The 10-sqft tolerance (`_IDENTICAL_TOLERANCE`) absorbs minor measurement roundin
 
 ### `adds_sb9`
 
-`True` if the primary permit's parsed structures contain at least one segment classified as `sb9`. This signals the rebuild adds a second primary unit under California's SB-9 lot-split / two-unit law. Otherwise `False` (including when no permit exists yet).
+`True` if any of the parcel's fire-related EPIC-LA cases mentions SB-9 in `DESCRIPTION`, `PROJECT_NAME`, or `PROJECTNAME` (regex `\bSB[\- ]?9\b` / `\bSENATE\s+BILL\s*9`). This signals the parcel is using California's SB-9 permitting pathway, which allows building more than one primary dwelling and/or more than one ADU on the parcel.
+
+SB-9 is a parcel-level pathway flag, **not** a structure type. SB-9-entitled primary dwellings are counted in `post_sfr_count`/`post_sfr_sqft` (and SB-9-entitled ADUs in `post_adu_*`); the structure-level rollups already account for the additional units. The flag is independent of which extraction path produced the post-fire counts (regex or LLM): it's sourced from text detection across all qualifying records, so a parcel that mentions SB-9 in its `PROJECT_NAME` but never inside a structure-line item is still flagged.
 
 ### `added_adu_count`
 
@@ -456,12 +458,10 @@ GeoJSON `FeatureCollection`. One `Feature` per Altadena parcel.
 | `post_adu_sqft` | `int \| null` | |
 | `post_mfr_count` | `int \| null` | Same shape, for `mfr` segments. |
 | `post_mfr_sqft` | `int \| null` | |
-| `post_sb9_count` | `int \| null` | Same shape, for `sb9` segments. |
-| `post_sb9_sqft` | `int \| null` | |
 | `lfl_claimed` | `bool \| null` | `true` = Like-for-Like, `false` = Custom/Non-LFL, `null` = no source stated either way. See [Like-for-Like vs Custom](#like-for-like-vs-custom-lfl-claim). |
 | `lfl_conflict` | `bool` | `true` if cases gave conflicting LFL signals; the most-recent case still wins. |
 | `sfr_size_comparison` | `string \| null` | `larger`/`identical`/`smaller` (±10 sqft tolerance), or `null` if either pre or post SFR sqft is missing. |
-| `adds_sb9` | `bool` | `true` if the primary permit description included an SB-9 segment. |
+| `adds_sb9` | `bool` | `true` if any fire-related case mentions SB-9 in `DESCRIPTION`, `PROJECT_NAME`, or `PROJECTNAME`. SB-9 is a parcel-level permitting pathway, not a structure type — see [`adds_sb9`](#adds_sb9). |
 | `added_adu_count` | `int` | `max(0, post_adu_count − pre_adu_count)`. Always 0 if no primary permit. |
 | `rebuild_progress_num` | `int \| null` | Max `REBUILD_PROGRESS_NUM` (1–7) across all fire cases on the parcel. `null` = no fire case with a progress number (e.g. parcel has only Temporary Housing cases). |
 | `rebuild_progress` | `string \| null` | Human-readable label corresponding to `rebuild_progress_num`. |

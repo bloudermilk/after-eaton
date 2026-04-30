@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from after_eaton.processing.description_parser import (
     extract_lfl_claim,
+    mentions_sb9,
     parse_description,
 )
 
@@ -40,7 +41,9 @@ def test_numbered_multi_structure() -> None:
     assert len(result) == 4
     types = [r.struct_type for r in result]
     sqfts = [r.sqft for r in result]
-    assert types == ["sb9", "sfr", "adu", "adu"]
+    # Item 1: bare "SB9" with no other type keyword falls back to sfr.
+    # Items 2-4: positive type matches.
+    assert types == ["sfr", "sfr", "adu", "adu"]
     assert sqfts == [1107.0, 1115.0, 1110.0, 1110.0]
 
 
@@ -130,8 +133,38 @@ def test_sb9_does_not_capture_9_as_sqft() -> None:
     """Bare "SB9 SFR" must not yield 9 sqft — there's no word boundary before the 9."""
     desc = "EATON FIRE REBUILD 1-STORY 710 S.F. SB9 SFR (2 BEDROOMS AND 1 BATHROOM)"
     result = parse_description(desc)
-    assert result[0].struct_type == "sb9"
+    # Positive SFR match wins over the SB-9 fallback.
+    assert result[0].struct_type == "sfr"
     assert result[0].sqft == 710.0
+
+
+def test_bare_sb9_falls_back_to_sfr() -> None:
+    """A segment mentioning SB-9 with no other type keyword classifies as SFR."""
+    desc = (
+        "EATON FIRE REBUILD - NEW 2-STORY 1107 SF SB9 (2 BEDROOMS AND 2 BATHROOMS) "
+        "WITH 464 SF ATTACHED GARAGE WITH 651 SF STORAGE"
+    )
+    result = parse_description(desc)
+    assert len(result) == 1
+    assert result[0].struct_type == "sfr"
+    assert result[0].sqft == 1107.0
+
+
+def test_sb9_adu_classifies_as_adu() -> None:
+    """A SB-9 ADU is still an ADU — positive ADU match beats the SB-9 fallback."""
+    desc = "EATON FIRE REBUILD - NEW 800 SF SB9 ADU (1 BED, 1 BATH)"
+    result = parse_description(desc)
+    assert result[0].struct_type == "adu"
+
+
+def test_sb9_variants_via_mentions_sb9() -> None:
+    assert mentions_sb9("NEW 1107 SF SB9 unit") is True
+    assert mentions_sb9("project filed under SB-9") is True
+    assert mentions_sb9("SB 9 lot split") is True
+    assert mentions_sb9("Senate Bill 9 entitlement") is True
+    assert mentions_sb9("standard SFR rebuild") is False
+    assert mentions_sb9(None) is False
+    assert mentions_sb9("") is False
 
 
 def test_temporary_housing_classification() -> None:

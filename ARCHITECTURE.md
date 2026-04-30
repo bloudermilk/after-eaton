@@ -121,9 +121,9 @@ For the analytical contract — what each derived field *means* — see [METHODO
 | `sources/census.py` | Pulls 2020 census tracts (layer 14) intersecting the fire-perimeter envelope, then pulls every block group (layer 15) whose parent CT20 is in that tract set so block groups exactly partition the tracts. | `fetch_census_tracts()`, `fetch_census_block_groups()` |
 | `sources/schemas.py` | TypedDict definitions and `validate_*` functions. Required-field type checks; raises `SchemaError` (with `field=`) on drift. | `DinsParcel`, `EpicCase`, `FirePerimeter`, `CensusTract`, `CensusBlockGroup`, `validate_dins`, `validate_epicla`, `validate_fire_perimeter`, `validate_census_tracts`, `validate_census_block_groups` |
 | `processing/normalize.py` | Damage and BSD enums + raw→canonical maps. Rebuild-progress label table. | `DamageLevel`, `BsdStatus`, `normalize_damage`, `normalize_bsd`, `rebuild_progress_label` |
-| `processing/description_parser.py` | EPIC-LA free-text parser: splits a DESCRIPTION into structures, classifies each as `sfr`/`adu`/`jadu`/`sb9`/`mfr`/`garage`/`temporary_housing`/`repair`/`retaining_wall`/`seismic`/`unknown`, extracts sqft. Also extracts LFL/Custom claim from PROJECT_NAME or DESCRIPTION. | `parse_description()`, `extract_lfl_claim()`, `ParsedStructure`, `RESIDENTIAL_TYPES` |
+| `processing/description_parser.py` | EPIC-LA free-text parser: splits a DESCRIPTION into structures, classifies each as `sfr`/`adu`/`jadu`/`mfr`/`garage`/`temporary_housing`/`repair`/`retaining_wall`/`seismic`/`unknown`, extracts sqft. Bare-SB9 segments classify as `sfr` via fallback. Also extracts LFL/Custom claim from PROJECT_NAME or DESCRIPTION, and exposes `mentions_sb9()` for parcel-level SB-9 detection. | `parse_description()`, `extract_lfl_claim()`, `mentions_sb9()`, `ParsedStructure`, `RESIDENTIAL_TYPES` |
 | `processing/join.py` | Group cases by `MAIN_AIN`, left-join to DINS parcels. Logs unmatched AINs. | `join_cases_to_parcels()`, `JoinedParcel` |
-| `processing/parcel_analysis.py` | Per-parcel synthesis. Reads DINS structure slots for pre-fire; selects primary permit for regex post-fire; selects qualifying records (plans + permits) for LLM input; runs LFL resolution; computes size comparison and SB-9/ADU deltas. | `analyze_parcel()`, `ParcelResult`, `_resolve_lfl()`, `_select_primary_permit()`, `select_qualifying_records()`, `pre_fire_summary()` |
+| `processing/parcel_analysis.py` | Per-parcel synthesis. Reads DINS structure slots for pre-fire; selects primary permit for regex post-fire; selects qualifying records (plans + permits) for LLM input; runs LFL resolution; computes size comparison, SB-9 pathway flag (text scan over DESCRIPTION/PROJECT_NAME/PROJECTNAME), and ADU deltas. | `analyze_parcel()`, `ParcelResult`, `_resolve_lfl()`, `_select_primary_permit()`, `select_qualifying_records()`, `_detect_sb9()`, `pre_fire_summary()` |
 | `processing/llm_provider.py` | OpenRouter chat-completions client (OpenAI-compatible endpoint, `temperature=0`, retry on transient HTTP errors). The cache key includes `model_id` so swapping models invalidates the cache cleanly. | `OpenRouterProvider`, `LLMResponse`, `LLMError` |
 | `processing/llm_prompts.py` | System + user prompt templates and `parcel_cache_key()` (deterministic SHA-256 over sorted record content + provider + model + prompt version). Bump `PROMPT_VERSION` when the prompt changes meaningfully. | `SYSTEM_PROMPT`, `PROMPT_VERSION`, `ParcelContext`, `render_user_prompt()`, `parcel_cache_key()` |
 | `processing/llm_extraction.py` | Per-parcel `extract_structures()` (cache-or-call, fallback on invalid JSON / fenced output) plus cache load/save (single JSON file under `data/llm-extraction-cache.json`) and `prune_cache()`. | `LLMExtraction`, `ExtractedStructure`, `ExtractionCache`, `extract_structures()`, `load_cache()`, `save_cache()`, `prune_cache()` |
@@ -408,12 +408,12 @@ tests/
   "epic_cases": [ { ... raw EPIC-LA case attributes + _geometry ... }, ... ],
   "expected": {
     "pre_sfr_sqft": 1136,
-    "post_sfr_sqft": 1115,
+    "post_sfr_sqft": 2222,
     "adds_sb9": true,
     "added_adu_count": 2,
     "rebuild_progress_num": 4,
     "lfl_claimed": null,
-    "sfr_size_comparison": "smaller"
+    "sfr_size_comparison": "larger"
   }
 }
 ```

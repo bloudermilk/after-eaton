@@ -208,10 +208,10 @@
   "expected": {
     "pre_sfr_sqft": 1136,
     "adds_sb9": true,
-    "post_sfr_sqft": 1115,
+    "post_sfr_sqft": 2222,
     "added_adu_count": 2,
     "rebuild_progress_num": 4,
     "lfl_claimed": null,
-    "sfr_size_comparison": "smaller"
+    "sfr_size_comparison": "larger"
   }
 }

@@ -170,7 +170,7 @@ def extract_structures(
 
 
 _VALID_STRUCT_TYPES = frozenset(
-    {"sfr", "adu", "jadu", "sb9", "mfr", "garage", "repair", "other"}
+    {"sfr", "adu", "jadu", "mfr", "garage", "repair", "other"}
 )
 _VALID_CONFIDENCES = frozenset({"high", "medium", "low"})
 

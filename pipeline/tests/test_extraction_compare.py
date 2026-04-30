@@ -50,15 +50,12 @@ def test_derive_post_buckets_by_type() -> None:
         _struct("sfr", 1500),
         _struct("adu", 600),
         _struct("adu", 800),
-        _struct("sb9", 700),
     )
     post = derive_post_from_llm(extraction)
     assert post.sfr_count == 1
     assert post.sfr_sqft == 1500
     assert post.adu_count == 2
     assert post.adu_sqft == 1400
-    assert post.sb9_count == 1
-    assert post.sb9_sqft == 700
     assert post.mfr_count == 0
 
 
@@ -84,8 +81,6 @@ def test_compare_no_issues_when_agreement() -> None:
         adu_sqft=None,
         mfr_count=0,
         mfr_sqft=None,
-        sb9_count=0,
-        sb9_sqft=None,
     )
     llm_post = derive_post_from_llm(_extraction(_struct("sfr", 1500)))
     issues = compare_extractions(
@@ -103,8 +98,6 @@ def test_compare_emits_count_disagreement() -> None:
         adu_sqft=3192,
         mfr_count=0,
         mfr_sqft=None,
-        sb9_count=0,
-        sb9_sqft=None,
     )
     llm_extraction = _extraction(
         _struct("adu", 1596),
@@ -127,8 +120,6 @@ def test_compare_emits_sqft_disagreement_when_counts_match() -> None:
         adu_sqft=None,
         mfr_count=0,
         mfr_sqft=None,
-        sb9_count=0,
-        sb9_sqft=None,
     )
     llm_extraction = _extraction(_struct("sfr", 1500))
     llm_post = derive_post_from_llm(llm_extraction)
@@ -145,8 +136,6 @@ def test_compare_no_sqft_disagreement_within_tolerance() -> None:
         adu_sqft=None,
         mfr_count=0,
         mfr_sqft=None,
-        sb9_count=0,
-        sb9_sqft=None,
     )
     # 5% delta — under 10% tolerance
     llm_extraction = _extraction(_struct("sfr", 1575))
@@ -171,8 +160,6 @@ def test_compare_emits_low_confidence() -> None:
         adu_sqft=None,
         mfr_count=0,
         mfr_sqft=None,
-        sb9_count=0,
-        sb9_sqft=None,
     )
     llm_extraction = _extraction(_struct("sfr", 1500, confidence="low"))
     llm_post = derive_post_from_llm(llm_extraction)

@@ -50,8 +50,6 @@ def _result(
         post_adu_sqft=None,
         post_mfr_count=None,
         post_mfr_sqft=None,
-        post_sb9_count=None,
-        post_sb9_sqft=None,
         lfl_claimed=None,
         lfl_conflict=False,
         sfr_size_comparison=None,

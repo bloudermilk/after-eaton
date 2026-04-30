@@ -10,7 +10,6 @@ StructType = Literal[
     "sfr",
     "adu",
     "jadu",
-    "sb9",
     "mfr",
     "garage",
     "temporary_housing",
@@ -21,9 +20,7 @@ StructType = Literal[
 ]
 
 # struct types that count toward post-fire dwelling counts
-RESIDENTIAL_TYPES: frozenset[StructType] = frozenset(
-    {"sfr", "adu", "jadu", "sb9", "mfr"}
-)
+RESIDENTIAL_TYPES: frozenset[StructType] = frozenset({"sfr", "adu", "jadu", "mfr"})
 
 
 @dataclass(frozen=True)
@@ -63,7 +60,6 @@ _SEISMIC_RE = re.compile(r"\bSEISMIC\s+(?:RETROFIT|UPGRADE|REROFIT)", re.I)
 # Across tiers we pick the highest-priority tier with any match.
 # T1 (residential primary) beats T2 (garage), which beats T3 (non-structural).
 _T1_PRIMARY: list[tuple[StructType, re.Pattern[str]]] = [
-    ("sb9", _SB9_RE),
     ("jadu", _JADU_RE),
     ("adu", _ADU_RE),
     ("sfr", _SFR_RE),
@@ -78,7 +74,6 @@ _T3_NONSTRUCT: list[tuple[StructType, re.Pattern[str]]] = [
     ("retaining_wall", _RETAINING_WALL_RE),
     ("seismic", _SEISMIC_RE),
 ]
-_TIERS = (_T1_PRIMARY, _T2_SECONDARY, _T3_NONSTRUCT)
 
 # Leading word boundary keeps us from picking the trailing "9" in tokens like
 # "SB9 SFR" as 9 sqft. Two unit forms are accepted:
@@ -111,6 +106,13 @@ def parse_description(description: str | None) -> list[ParsedStructure]:
 
     segments = _split_segments(description)
     return [_parse_segment(seg) for seg in segments]
+
+
+def mentions_sb9(text: str | None) -> bool:
+    """True iff the text mentions SB-9 in any common form."""
+    if not text:
+        return False
+    return _SB9_RE.search(text) is not None
 
 
 def extract_lfl_claim(project_name: str | None) -> bool | None:
@@ -149,16 +151,38 @@ def _split_segments(description: str) -> list[str]:
 def _parse_segment(segment: str) -> ParsedStructure:
     sqfts = [(m.start(), _to_float(m.group(1))) for m in _SQFT_RE.finditer(segment)]
 
-    for tier in _TIERS:
-        matches: list[tuple[int, StructType]] = []
-        for label, pattern in tier:
-            for m in pattern.finditer(segment):
-                matches.append((m.start(), label))
-        if not matches:
-            continue
+    # Tier 1: positive primary residential matches always win.
+    matches: list[tuple[int, StructType]] = []
+    for label, pattern in _T1_PRIMARY:
+        for m in pattern.finditer(segment):
+            matches.append((m.start(), label))
+    if matches:
         pos, label = min(matches)
         chosen_sqft = _pick_sqft_near(pos, sqfts)
         return ParsedStructure(sqft=chosen_sqft, struct_type=label, raw_segment=segment)
+
+    # SB-9 fallback: a segment that mentions SB-9 but no primary type keyword
+    # almost always describes a primary dwelling under SB-9 entitlement
+    # (e.g. "1107 SF SB9 (2 BR / 2 BA) WITH ATTACHED GARAGE"). Classify as
+    # SFR. This must precede T2/T3 — a SB-9 unit with an attached-garage
+    # clause is still a primary dwelling, not a garage.
+    sb9_match = _SB9_RE.search(segment)
+    if sb9_match is not None:
+        chosen_sqft = _pick_sqft_near(sb9_match.start(), sqfts)
+        return ParsedStructure(sqft=chosen_sqft, struct_type="sfr", raw_segment=segment)
+
+    # Tiers 2 & 3: secondary/non-structural fallbacks.
+    for tier in (_T2_SECONDARY, _T3_NONSTRUCT):
+        matches = []
+        for label, pattern in tier:
+            for m in pattern.finditer(segment):
+                matches.append((m.start(), label))
+        if matches:
+            pos, label = min(matches)
+            chosen_sqft = _pick_sqft_near(pos, sqfts)
+            return ParsedStructure(
+                sqft=chosen_sqft, struct_type=label, raw_segment=segment
+            )
 
     chosen_sqft = sqfts[0][1] if sqfts else None
     return ParsedStructure(sqft=chosen_sqft, struct_type="unknown", raw_segment=segment)
