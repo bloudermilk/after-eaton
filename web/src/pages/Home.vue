@@ -151,9 +151,9 @@ const dwellingDenominator = computed(() => summary.value?.dwelling_rebuild_count
         <DistributionBars :buckets="aduBuckets" :denominator="dwellingDenominator" />
       </StatCard>
 
-      <StatCard title="SB-9 lot splits" subtitle="Parcels with SB-9 permits filed">
+      <StatCard title="SB-9 permits" subtitle="Parcels with SB-9 permits filed">
         <template #info>
-          <InfoButton title="SB-9 lot splits">
+          <InfoButton title="SB-9 permits">
             <p>
               California's SB-9 law (effective 2022) allows residential lots to be split and rebuilt
               with up to two units per resulting parcel. This counts parcels whose post-fire EPIC-LA
