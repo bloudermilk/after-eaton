@@ -315,7 +315,7 @@ The site fetches `summary.json` and `qc-report.json` from same-origin (`./data/.
 
 The build step runs `gh release download data-latest` to populate `web/public/data/` before `npm run build`, so the resulting `dist/` is self-contained — no third-party runtime fetches.
 
-**One-time manual setup:** in repo Settings → Pages, set the source to "GitHub Actions". `vite.config.ts` sets `base: '/after-eaton/'` for the project-page URL.
+**One-time manual setup:** in repo Settings → Pages, set the source to "GitHub Actions" and set the custom domain to `altadata.org`. `web/public/CNAME` carries that domain into every build artifact (GitHub Pages requires the file in the published root), and `vite.config.ts` sets `base: '/'` to serve from the apex.
 
 ## Local development
 
