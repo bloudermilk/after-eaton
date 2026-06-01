@@ -54,6 +54,8 @@ def _result(
         lfl_conflict=False,
         sfr_size_comparison=None,
         adds_sb9=False,
+        adds_sb1123=False,
+        sb_pathway_conflict=False,
         added_adu_count=0,
         rebuild_progress_num=rebuild_progress_num,
         rebuild_progress=None,

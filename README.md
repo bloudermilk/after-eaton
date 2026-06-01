@@ -39,7 +39,7 @@ For each parcel in the burn area we compute, among other things:
 * Quantity and size of single-family residence(s), accessory dwelling unit(s), and multi-family residence(s) — both pre-fire (from DINS structure slots) and post-fire (from EPIC-LA permit descriptions).
 * Whether the rebuild is **Like-for-Like** or **Custom** (the County's binary categorization).
 * If Like-for-Like, whether the rebuilt SFR is `smaller`, `identical`, or `larger` than pre-fire (±10 sqft tolerance).
-* Whether the rebuild adds a primary unit under California's **SB-9** lot-split / two-unit law.
+* Whether the rebuild adds primary units under California's small-lot pathways: **SB-9** (lot-split / two units per lot) or **SB 1123** (small-lot subdivision, up to 10 lots).
 * Whether the rebuild adds **ADUs** beyond what the parcel had pre-fire, and how many.
 * Two damage signals side-by-side: **FIRESCOPE** %-loss bucket (DINS `DAMAGE_1`) and **Safety Assessment** tag (DINS `BSD_Tag`). Both are exposed because they answer different questions and disagree on ~200 parcels.
 * Pass-through fields from each source: permit status, ROE status, debris-clearing status, rebuild progress.

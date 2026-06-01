@@ -56,9 +56,9 @@ def override_with_llm(
         regex_post_for_compare, llm_post, extraction=extraction
     )
 
-    # adds_sb9 is sourced from text detection in parcel_analysis.py and is
-    # independent of which extraction path produced post_* counts; leave it
-    # alone in the override.
+    # adds_sb9, adds_sb1123, and sb_pathway_conflict are sourced from text
+    # detection in parcel_analysis.py and are independent of which extraction
+    # path produced post_* counts; leave them alone in the override.
     new_result = dataclasses.replace(
         result,
         post_sfr_count=llm_post.sfr_count,

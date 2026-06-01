@@ -151,17 +151,28 @@ const dwellingDenominator = computed(() => summary.value?.dwelling_rebuild_count
         <DistributionBars :buckets="aduBuckets" :denominator="dwellingDenominator" />
       </StatCard>
 
-      <StatCard title="SB-9 permits" subtitle="Parcels with SB-9 permits filed">
+      <StatCard title="Small-lot housing projects" subtitle="Density increases via state bills">
         <template #info>
-          <InfoButton title="SB-9 permits">
+          <InfoButton title="Small-lot housing projects">
             <p>
-              California's SB-9 law (effective 2022) allows residential lots to be split and rebuilt
-              with up to two units per resulting parcel. This counts parcels whose post-fire EPIC-LA
-              permit description mentions an SB-9 unit.
+              California's <strong>SB-9</strong> (effective 2022) allows residential lots to be
+              split and rebuilt with up to two units per resulting parcel. <strong>SB 1123</strong>
+              (effective 2025) lets owners of single-family-zoned vacant lots create up to 10
+              small-lot subdivisions through a ministerial process.
+            </p>
+            <p>
+              The two pathways are mutually exclusive — a parcel uses one or the other. Each count
+              is parcels whose post-fire EPIC-LA records mention that bill in
+              <code>DESCRIPTION</code>, <code>PROJECT_NAME</code>, or <code>PROJECTNAME</code>. If a
+              parcel's records cite both, the most-recent mention wins (and the disagreement is
+              logged for review).
             </p>
           </InfoButton>
         </template>
-        <BigNumber :value="summary.sb9_count" label="Parcels" />
+        <div class="paired-numbers">
+          <BigNumber :value="summary.sb9_count" label="SB 9 Parcels" />
+          <BigNumber :value="summary.sb1123_count" label="SB 1123 Parcels" />
+        </div>
       </StatCard>
     </section>
   </main>
@@ -192,5 +203,12 @@ const dwellingDenominator = computed(() => summary.value?.dwelling_rebuild_count
   .grid {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+.paired-numbers {
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-4);
+  width: 100%;
 }
 </style>

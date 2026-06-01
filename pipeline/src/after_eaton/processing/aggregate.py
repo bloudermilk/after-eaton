@@ -46,6 +46,7 @@ class RegionCounts:
     sfr_size_pct_larger_over_30: int
     sfr_size_pct_unknown: int
     sb9_count: int
+    sb1123_count: int
     # Distribution of parcels by how many ADUs they added relative to pre-fire.
     # Parcels with added_adu_count == 0 are not in any of these buckets.
     adu_added_1_count: int
@@ -136,6 +137,7 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
         size_buckets[_sfr_size_bucket(p)] += 1
 
     sb9 = sum(1 for p in parcels if p.adds_sb9)
+    sb1123 = sum(1 for p in parcels if p.adds_sb1123)
     adu_added_1 = sum(1 for p in parcels if p.added_adu_count == 1)
     adu_added_2 = sum(1 for p in parcels if p.added_adu_count == 2)
     adu_added_3_plus = sum(1 for p in parcels if p.added_adu_count >= 3)
@@ -167,6 +169,7 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
         sfr_size_pct_larger_over_30=size_buckets["larger_over_30"],
         sfr_size_pct_unknown=size_buckets["unknown"],
         sb9_count=sb9,
+        sb1123_count=sb1123,
         adu_added_1_count=adu_added_1,
         adu_added_2_count=adu_added_2,
         adu_added_3_plus_count=adu_added_3_plus,

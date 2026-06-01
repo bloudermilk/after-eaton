@@ -8,10 +8,11 @@ from typing import Any, Literal
 
 from ..sources.schemas import DinsParcel, EpicCase
 from .description_parser import (
+    _SB9_RE,
+    _SB1123_RE,
     ParsedStructure,
     StructType,
     extract_lfl_claim,
-    mentions_sb9,
     parse_description,
 )
 from .join import JoinedParcel
@@ -65,6 +66,13 @@ class ParcelResult:
     lfl_conflict: bool
     sfr_size_comparison: SfrSizeComparison | None
     adds_sb9: bool
+    adds_sb1123: bool
+    # True when fire cases mention both SB-9 and SB-1123. The two are
+    # mutually exclusive pathways in practice; resolution is most-recent
+    # wins (see `_resolve_sb_pathway`), and this flag surfaces the noisy
+    # source data for human review without changing the deterministic
+    # outcome — same shape as `lfl_conflict`.
+    sb_pathway_conflict: bool
     added_adu_count: int
     # Progress
     rebuild_progress_num: int | None
@@ -87,7 +95,7 @@ def analyze_parcel(joined: JoinedParcel) -> ParcelResult:
     lfl_claimed, lfl_conflict = _resolve_lfl(fire_cases)
 
     sfr_cmp = _compare_sfr(pre.sfr_sqft, post.sfr_sqft)
-    adds_sb9 = _detect_sb9(fire_cases)
+    adds_sb9, adds_sb1123, sb_pathway_conflict = _resolve_sb_pathway(fire_cases)
     added_adu_count = max(0, (post.adu_count or 0) - pre.adu_count)
 
     return ParcelResult(
@@ -112,6 +120,8 @@ def analyze_parcel(joined: JoinedParcel) -> ParcelResult:
         lfl_conflict=lfl_conflict,
         sfr_size_comparison=sfr_cmp,
         adds_sb9=adds_sb9,
+        adds_sb1123=adds_sb1123,
+        sb_pathway_conflict=sb_pathway_conflict,
         added_adu_count=added_adu_count,
         rebuild_progress_num=progress,
         rebuild_progress=rebuild_progress_label(progress),
@@ -248,16 +258,67 @@ def filter_fire_cases(cases: list[EpicCase]) -> list[EpicCase]:
     return fire
 
 
-def _detect_sb9(cases: list[EpicCase]) -> bool:
-    """True iff any case mentions SB-9 in DESCRIPTION, PROJECT_NAME, or PROJECTNAME."""
-    for c in cases:
-        if (
-            mentions_sb9(c.get("DESCRIPTION"))
-            or mentions_sb9(c.get("PROJECT_NAME"))
-            or mentions_sb9(c.get("PROJECTNAME"))
-        ):
-            return True
-    return False
+def _resolve_sb_pathway(
+    fire_cases: list[EpicCase],
+) -> tuple[bool, bool, bool]:
+    """Resolve a parcel's SB-9 vs SB-1123 pathway flags.
+
+    SB-9 and SB-1123 are mutually exclusive entitlement pathways — a parcel
+    uses one or the other. When a parcel's records mention both, we
+    resolve by recency (mirrors `_resolve_lfl`): the most recent case to
+    mention either bill wins. A single case mentioning both is tiebroken
+    by later character position across DESCRIPTION → PROJECT_NAME →
+    PROJECTNAME.
+
+    Returns ``(adds_sb9, adds_sb1123, sb_pathway_conflict)``. Conflict is
+    True iff the union of mentions across all cases includes both bills;
+    the chosen flag is still deterministic.
+    """
+    if not fire_cases:
+        return False, False, False
+
+    ordered = sorted(
+        fire_cases,
+        key=lambda c: c.get("APPLY_DATE") or 0,
+        reverse=True,
+    )
+
+    any_sb9 = False
+    any_sb1123 = False
+    winner: Literal["sb9", "sb1123"] | None = None
+
+    for case in ordered:
+        # Concatenate the three pathway-bearing fields in fixed order so that
+        # the "later character position" tiebreaker is deterministic. The
+        # join character is irrelevant — we only need a stable ordering.
+        joined = "\n".join(
+            (
+                case.get("DESCRIPTION") or "",
+                case.get("PROJECT_NAME") or "",
+                case.get("PROJECTNAME") or "",
+            )
+        )
+        sb9_match = _SB9_RE.search(joined)
+        sb1123_match = _SB1123_RE.search(joined)
+
+        if sb9_match is not None:
+            any_sb9 = True
+        if sb1123_match is not None:
+            any_sb1123 = True
+
+        if winner is None:
+            if sb9_match is not None and sb1123_match is not None:
+                winner = "sb1123" if sb1123_match.start() > sb9_match.start() else "sb9"
+            elif sb9_match is not None:
+                winner = "sb9"
+            elif sb1123_match is not None:
+                winner = "sb1123"
+
+    if winner is None:
+        return False, False, False
+
+    conflict = any_sb9 and any_sb1123
+    return winner == "sb9", winner == "sb1123", conflict
 
 
 def _max_progress(cases: list[EpicCase]) -> int | None:

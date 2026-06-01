@@ -21,6 +21,8 @@ def test_qa_parcel_matches_expected(qa_fixture: dict[str, Any]) -> None:
     assert result.pre_sfr_sqft == expected["pre_sfr_sqft"]
     assert result.post_sfr_sqft == expected["post_sfr_sqft"]
     assert result.adds_sb9 is expected["adds_sb9"]
+    assert result.adds_sb1123 is expected["adds_sb1123"]
+    assert result.sb_pathway_conflict is expected["sb_pathway_conflict"]
     assert result.added_adu_count == expected["added_adu_count"]
     assert result.rebuild_progress_num == expected["rebuild_progress_num"]
     assert result.lfl_claimed == expected["lfl_claimed"]

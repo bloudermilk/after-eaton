@@ -511,6 +511,8 @@
   "expected": {
     "pre_sfr_sqft": 2012,
     "adds_sb9": false,
+    "adds_sb1123": false,
+    "sb_pathway_conflict": false,
     "post_sfr_sqft": 2140,
     "added_adu_count": 0,
     "rebuild_progress_num": 6,

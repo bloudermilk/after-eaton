@@ -26,6 +26,7 @@ export interface Summary {
   sfr_size_pct_larger_over_30: number;
   sfr_size_pct_unknown: number;
   sb9_count: number;
+  sb1123_count: number;
   adu_added_1_count: number;
   adu_added_2_count: number;
   adu_added_3_plus_count: number;

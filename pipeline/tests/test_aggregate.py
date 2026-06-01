@@ -18,6 +18,8 @@ def _make(
     pre_sfr_sqft: int | None = 1000,
     post_sfr_sqft: int | None = None,
     adds_sb9: bool = False,
+    adds_sb1123: bool = False,
+    sb_pathway_conflict: bool = False,
     added_adu_count: int = 0,
 ) -> ParcelResult:
     return ParcelResult(
@@ -42,6 +44,8 @@ def _make(
         lfl_conflict=False,
         sfr_size_comparison=sfr_size_comparison,  # type: ignore[arg-type]
         adds_sb9=adds_sb9,
+        adds_sb1123=adds_sb1123,
+        sb_pathway_conflict=sb_pathway_conflict,
         added_adu_count=added_adu_count,
         rebuild_progress_num=rebuild_progress_num,
         rebuild_progress=None,
@@ -81,6 +85,7 @@ def test_basic_counts() -> None:
             rebuild_progress_num=None,
             pre_sfr_sqft=1000,
             post_sfr_sqft=None,  # unknown bucket
+            adds_sb1123=True,
         ),
         _make(
             ain="4",
@@ -112,6 +117,7 @@ def test_basic_counts() -> None:
     assert s.sfr_size_pct_larger_over_30 == 0
     assert s.sfr_size_pct_unknown == 2
     assert s.sb9_count == 1
+    assert s.sb1123_count == 1
     assert s.adu_added_1_count == 0
     assert s.adu_added_2_count == 1
     assert s.adu_added_3_plus_count == 0

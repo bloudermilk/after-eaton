@@ -350,9 +350,21 @@ The 10-sqft tolerance (`_IDENTICAL_TOLERANCE`) absorbs minor measurement roundin
 
 ### `adds_sb9`
 
-`True` if any of the parcel's fire-related EPIC-LA cases mentions SB-9 in `DESCRIPTION`, `PROJECT_NAME`, or `PROJECTNAME` (regex `\bSB[\- ]?9\b` / `\bSENATE\s+BILL\s*9`). This signals the parcel is using California's SB-9 permitting pathway, which allows building more than one primary dwelling and/or more than one ADU on the parcel.
+`True` if the parcel's most recent fire-related EPIC-LA case to mention either small-lot pathway names SB-9 in `DESCRIPTION`, `PROJECT_NAME`, or `PROJECTNAME` (regex `\bSB[\- ]?9\b` / `\bSENATE\s+BILL\s*9`). This signals the parcel is using California's SB-9 permitting pathway, which allows building more than one primary dwelling and/or more than one ADU on the parcel.
 
-SB-9 is a parcel-level pathway flag, **not** a structure type. SB-9-entitled primary dwellings are counted in `post_sfr_count`/`post_sfr_sqft` (and SB-9-entitled ADUs in `post_adu_*`); the structure-level rollups already account for the additional units. The flag is independent of which extraction path produced the post-fire counts (regex or LLM): it's sourced from text detection across all qualifying records, so a parcel that mentions SB-9 in its `PROJECT_NAME` but never inside a structure-line item is still flagged.
+### `adds_sb1123`
+
+`True` if the parcel's most recent fire-related EPIC-LA case to mention either small-lot pathway names SB 1123 in `DESCRIPTION`, `PROJECT_NAME`, or `PROJECTNAME` (regex `\bSB[\- ]?1123\b` / `\bSENATE\s+BILL\s*1123`). SB 1123 (effective 2025) lets owners of single-family-zoned vacant lots create up to 10 small-lot subdivisions through a ministerial process.
+
+### Resolving SB-9 vs SB-1123
+
+SB-9 and SB-1123 are mutually exclusive entitlement pathways — a parcel uses one or the other, not both. When a parcel's records mention both, we resolve by recency (the same pattern used for [Like-for-Like vs Custom](#like-for-like-vs-custom-lfl-claim)): walk the parcel's fire-related cases in descending `APPLY_DATE`; the most recent case to mention either bill decides the winning flag. A single case mentioning both is tiebroken by later character position across `DESCRIPTION → PROJECT_NAME → PROJECTNAME`.
+
+Both flags are parcel-level pathway flags, **not** structure types. Pathway-entitled primary dwellings are counted in `post_sfr_count`/`post_sfr_sqft` (and pathway-entitled ADUs in `post_adu_*`); the structure-level rollups already account for the additional units. Both flags are independent of which extraction path produced the post-fire counts (regex or LLM): they're sourced from text detection across all qualifying records, so a parcel that mentions a pathway in its `PROJECT_NAME` but never inside a structure-line item is still flagged.
+
+### `sb_pathway_conflict`
+
+`True` iff the union of pathway mentions across the parcel's cases includes both SB-9 and SB-1123. The chosen `adds_sb9` / `adds_sb1123` flag is still deterministic per the recency rule above — this flag just surfaces noisy or disagreeing source data for human review (parallel to `lfl_conflict`).
 
 ### `added_adu_count`
 

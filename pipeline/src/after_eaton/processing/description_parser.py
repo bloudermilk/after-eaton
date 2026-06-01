@@ -36,6 +36,7 @@ _SFR_RE = re.compile(r"\bSF[RDH]\b|\bSINGLE[\s-]+FAMIL", re.I)
 _ADU_RE = re.compile(r"\bADUS?\b|\bACCESSORY\s+DWELL", re.I)
 _JADU_RE = re.compile(r"\bJADUS?\b|\bJUNIOR\s+ADU", re.I)
 _SB9_RE = re.compile(r"\bSB[\- ]?9\b|\bSENATE\s+BILL\s*9", re.I)
+_SB1123_RE = re.compile(r"\bSB[\- ]?1123\b|\bSENATE\s+BILL\s*1123", re.I)
 _MFR_RE = re.compile(
     r"\bDUPLEX\b|\bTRIPLEX\b|\bMFR\b|\bMULTI[\s-]*FAMIL|\bCONDO\s+UNIT", re.I
 )
@@ -115,6 +116,13 @@ def mentions_sb9(text: str | None) -> bool:
     return _SB9_RE.search(text) is not None
 
 
+def mentions_sb1123(text: str | None) -> bool:
+    """True iff the text mentions SB-1123 in any common form."""
+    if not text:
+        return False
+    return _SB1123_RE.search(text) is not None
+
+
 def extract_lfl_claim(project_name: str | None) -> bool | None:
     """Read the like-for-like claim from PROJECT_NAME.
 
@@ -161,14 +169,15 @@ def _parse_segment(segment: str) -> ParsedStructure:
         chosen_sqft = _pick_sqft_near(pos, sqfts)
         return ParsedStructure(sqft=chosen_sqft, struct_type=label, raw_segment=segment)
 
-    # SB-9 fallback: a segment that mentions SB-9 but no primary type keyword
-    # almost always describes a primary dwelling under SB-9 entitlement
-    # (e.g. "1107 SF SB9 (2 BR / 2 BA) WITH ATTACHED GARAGE"). Classify as
-    # SFR. This must precede T2/T3 — a SB-9 unit with an attached-garage
-    # clause is still a primary dwelling, not a garage.
-    sb9_match = _SB9_RE.search(segment)
-    if sb9_match is not None:
-        chosen_sqft = _pick_sqft_near(sb9_match.start(), sqfts)
+    # SB-9 / SB-1123 fallback: a segment that mentions either bill but no
+    # primary type keyword almost always describes a primary dwelling under
+    # that pathway's entitlement (e.g. "1107 SF SB9 (2 BR / 2 BA) WITH
+    # ATTACHED GARAGE"). Classify as SFR. Must precede T2/T3 — an SB-9 unit
+    # with an attached-garage clause is still a primary dwelling, not a
+    # garage.
+    sb_match = _SB9_RE.search(segment) or _SB1123_RE.search(segment)
+    if sb_match is not None:
+        chosen_sqft = _pick_sqft_near(sb_match.start(), sqfts)
         return ParsedStructure(sqft=chosen_sqft, struct_type="sfr", raw_segment=segment)
 
     # Tiers 2 & 3: secondary/non-structural fallbacks.

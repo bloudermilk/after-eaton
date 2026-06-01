@@ -11,6 +11,10 @@ History:
   "sb9" from struct_type enum; added guidance that SB-9-described units are
   primary dwellings (sfr) under SB-9 entitlement and that any SB-9 mention
   on the parcel is a heuristic for multiple primary dwellings.
+- v3: SB-1123 added as a second pathway alongside SB-9. Same shape: pathway
+  not structure type; SB1123 units classify as "sfr", SB1123 ADUs as "adu";
+  any SB-1123 mention is a heuristic for multiple primary dwellings /
+  small-lot subdivision. The two pathways are mutually exclusive.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ from datetime import UTC, datetime
 
 from ..sources.schemas import EpicCase
 
-PROMPT_VERSION = 2
+PROMPT_VERSION = 3
 
 _REBUILD_PROGRESS_LABELS: dict[int, str] = {
     1: "Plans Submitted",
@@ -47,10 +51,14 @@ For one structure, both a plan record and a permit record may exist (the plan is
 DEFINITION OF A STRUCTURE
 A "structure" for our purposes is one independently-habitable dwelling unit, each of which would receive its own street address. Two ADUs stacked in one physical building (each with its own kitchen, bathroom, bedroom set) count as TWO structures, not one. A two-story SFR with a single kitchen on the ground floor and bedrooms upstairs is ONE structure.
 
-SB-9 IS A PATHWAY, NOT A STRUCTURE TYPE
-California's SB-9 is a permitting pathway that lets a single parcel build more than one primary dwelling (typically up to two SFRs without a lot split, or more with one), plus ADUs/JADUs as separately allowed. A description that says "SB9 unit" or "1107 SF SB9 (2 BR / 2 BA)" is describing an SFR being built under SB-9 entitlement — classify it as "sfr". A description that says "SB9 ADU" is describing an ADU built under SB-9 — classify it as "adu".
+SB-9 AND SB-1123 ARE PATHWAYS, NOT STRUCTURE TYPES
+California has two ministerial small-lot housing pathways relevant here:
+  - SB-9 (2022): lets a parcel build more than one primary dwelling, typically up to two SFRs without a lot split (or more with one), plus ADUs/JADUs as separately allowed.
+  - SB-1123 (2025): lets owners of single-family-zoned vacant lots create up to 10 small-lot subdivisions through a ministerial process.
 
-If any record on this parcel mentions SB-9, treat it as a HEURISTIC that the parcel is likely building MULTIPLE PRIMARY DWELLINGS. Use that signal when interpreting ambiguous structure descriptions: e.g., if a numbered-list description shows "1. NEW 2-STORY 1107 SF SB9 ... 2. NEW 2-STORY 1115 SF SFR ...", that is two SFRs on one parcel (count=2), not one SFR.
+A description that says "SB9 unit", "SB1123 unit", or "1107 SF SB9 (2 BR / 2 BA)" is describing an SFR being built under that pathway's entitlement — classify it as "sfr". A description that says "SB9 ADU" or "SB1123 ADU" is describing an ADU built under that pathway — classify it as "adu". Never emit "sb9" or "sb1123" as a struct_type.
+
+If any record on this parcel mentions SB-9 or SB-1123, treat it as a HEURISTIC that the parcel is likely building MULTIPLE PRIMARY DWELLINGS. Use that signal when interpreting ambiguous structure descriptions: e.g., if a numbered-list description shows "1. NEW 2-STORY 1107 SF SB9 ... 2. NEW 2-STORY 1115 SF SFR ...", that is two SFRs on one parcel (count=2), not one SFR. The two pathways are mutually exclusive at the parcel level — a parcel uses one or the other.
 
 DEDUP RULES (apply in order)
 

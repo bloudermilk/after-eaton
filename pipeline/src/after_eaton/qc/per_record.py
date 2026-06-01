@@ -92,6 +92,19 @@ def check_record(
             )
         )
 
+    if result.sb_pathway_conflict:
+        warnings.append(
+            RecordWarning(
+                ain=result.ain,
+                code="sb_pathway_conflict",
+                detail=(
+                    "SB-9 and SB-1123 are mutually exclusive pathways; the "
+                    "parcel's cases mention both. Most-recent case's bill won."
+                ),
+                severity="data",
+            )
+        )
+
     return warnings
 
 
