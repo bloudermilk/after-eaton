@@ -6,8 +6,17 @@ from altadata.processing.description_parser import (
     extract_lfl_claim,
     mentions_sb9,
     mentions_sb1123,
+    mentions_sb1123_any,
     parse_description,
 )
+
+
+def test_mentions_sb1123_any_scans_all_fields() -> None:
+    assert mentions_sb1123_any(None, None, "SB 1123 SUBDIVISION")
+    assert mentions_sb1123_any("rebuild SB-1123 unit")
+    # A bare "1123" inside a project number is not an SB-1123 mention.
+    assert not mentions_sb1123_any("plain rebuild", "PRJ2025-001123", None)
+    assert not mentions_sb1123_any(None, None, None)
 
 
 def test_single_sfr_with_comma_sqft() -> None:

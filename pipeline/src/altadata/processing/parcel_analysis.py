@@ -6,13 +6,14 @@ import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from ..sources.schemas import DinsParcel, EpicCase
+from ..sources.schemas import CASE_HISTORY_SOURCE, DinsParcel, EpicCase
 from .description_parser import (
     _SB9_RE,
     _SB1123_RE,
     ParsedStructure,
     StructType,
     extract_lfl_claim,
+    mentions_sb1123_any,
     parse_description,
 )
 from .join import JoinedParcel
@@ -252,6 +253,11 @@ def filter_fire_cases(cases: list[EpicCase]) -> list[EpicCase]:
         if case.get("DISASTER_TYPE") == _EATON_DISASTER:
             fire.append(case)
             continue
+        # Case-history supplement (e.g. SB-1123) is pre-filtered to the burn
+        # area + post-fire, so any case it supplied is fire-related.
+        if case.get("_source") == CASE_HISTORY_SOURCE:
+            fire.append(case)
+            continue
         desc = case.get("DESCRIPTION") or ""
         if desc and _EATON_DESC_RE.search(desc):
             fire.append(case)
@@ -346,9 +352,11 @@ def select_qualifying_records(cases: list[EpicCase]) -> list[EpicCase]:
     """Return all fire-related records eligible for LLM-based structure inference.
 
     Includes PermitManagement records with WORKCLASS_NAME ∈ {"New", "Rebuild
-    Project"} and PlanManagement records with WORKCLASS_NAME == "Rebuild".
-    Skips Temporary Housing Project records — RVs/trailers aren't part of the
-    planned final state.
+    Project"} and PlanManagement records with WORKCLASS_NAME == "Rebuild". Also
+    includes any PlanManagement record that mentions SB-1123 — those are
+    small-lot subdivisions (e.g. "(10) FEE-SIMPLE SINGLE FAMILY LOTS") whose
+    planned dwellings we want the LLM to count. Skips Temporary Housing Project
+    records — RVs/trailers aren't part of the planned final state.
     """
     return [
         c
@@ -360,7 +368,14 @@ def select_qualifying_records(cases: list[EpicCase]) -> list[EpicCase]:
             )
             or (
                 c.get("MODULENAME") == "PlanManagement"
-                and c.get("WORKCLASS_NAME") == _PLAN_REBUILD_WORKCLASS
+                and (
+                    c.get("WORKCLASS_NAME") == _PLAN_REBUILD_WORKCLASS
+                    or mentions_sb1123_any(
+                        c.get("DESCRIPTION"),
+                        c.get("PROJECT_NAME"),
+                        c.get("PROJECTNAME"),
+                    )
+                )
             )
         )
     ]

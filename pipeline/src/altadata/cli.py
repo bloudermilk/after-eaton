@@ -25,6 +25,7 @@ from .processing.extraction_compare import (
     extraction_metrics,
     override_with_llm,
 )
+from .processing.geometry import bounding_envelope
 from .processing.join import JoinedParcel, join_cases_to_parcels
 from .processing.llm_extraction import (
     ExtractionCache,
@@ -49,7 +50,9 @@ from .qc.report import QcReport, enforce, print_report, write_report
 from .sources.census import fetch_census_block_groups, fetch_census_tracts
 from .sources.dins import fetch_dins_parcels
 from .sources.epicla import fetch_epicla_cases
+from .sources.epicla_case_history import fetch_case_history_sb1123
 from .sources.fire_perimeter import fetch_fire_perimeter
+from .sources.schemas import EpicCase
 
 logger = logging.getLogger("altadata")
 
@@ -138,6 +141,21 @@ def run(
     if not parcels or not cases or not perimeter:
         logger.error("source returned zero rows; refusing to publish")
         sys.exit(2)
+
+    # SB-1123 small-lot subdivisions are filed without a disaster tag, so they
+    # never appear in the Eaton-tagged EPIC view. Pull them from the county-wide
+    # Case History, bounded to the burn-area envelope + post-fire date, and merge
+    # them in. An empty result is fine — it just means no SB-1123 cases yet.
+    logger.info("fetching SB-1123 cases from EPIC-LA Case History")
+    case_history = fetch_case_history_sb1123(bounding_envelope(perimeter))
+    logger.info("fetched %d SB-1123 case-history cases", len(case_history))
+    write_raw_records(
+        cast(list[dict[str, Any]], case_history),
+        out_dir / "source-epicla-case-history.json",
+        source_name="EPIC-LA_Case_History",
+        fetched_at=generated_at,
+    )
+    cases = _merge_cases(cases, case_history)
 
     logger.info("fetching census tracts within perimeter envelope")
     tracts = fetch_census_tracts(perimeter)
@@ -281,6 +299,24 @@ def _maybe_build_provider(
         return OpenRouterProvider(model_id=model_id), None
     except LLMError as exc:
         return None, str(exc)
+
+
+def _merge_cases(base: list[EpicCase], extra: list[EpicCase]) -> list[EpicCase]:
+    """Append supplemental cases, skipping any CASENUMBER already present.
+
+    SB-1123 case-history records carry a null disaster type so they shouldn't
+    collide with the Eaton view, but we dedupe on CASENUMBER as a safety net.
+    """
+    seen = {c.get("CASENUMBER") for c in base if c.get("CASENUMBER")}
+    merged = list(base)
+    for case in extra:
+        number = case.get("CASENUMBER")
+        if number and number in seen:
+            continue
+        merged.append(case)
+        if number:
+            seen.add(number)
+    return merged
 
 
 def _analyze_all(

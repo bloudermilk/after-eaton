@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from typing import Any, NotRequired, TypedDict
 
+# Value stamped onto `EpicCase._source` by sources that supplement the
+# Eaton-tagged EPIC view (the Case History SB-1123 pull). `filter_fire_cases`
+# treats any case carrying it as fire-related — these records are, by
+# construction, post-fire applications inside the burn area.
+CASE_HISTORY_SOURCE = "epicla_case_history"
+
 
 class DinsParcel(TypedDict, total=False):
     """A single DINS-tagged parcel (LA County 2025 Parcels with DINS)."""
@@ -105,6 +111,9 @@ class EpicCase(TypedDict, total=False):
     STATUS: NotRequired[str | None]
     MAIN_ADDRESS: NotRequired[str | None]
     PERMIT_VALUATION: NotRequired[float | None]
+    # Internal: which source supplied this case (see CASE_HISTORY_SOURCE).
+    # Absent for the Eaton-tagged EPIC view; set by the Case History pull.
+    _source: NotRequired[str | None]
     _geometry: NotRequired[dict[str, Any] | None]
 
 

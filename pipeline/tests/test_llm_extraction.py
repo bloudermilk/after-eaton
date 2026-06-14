@@ -19,6 +19,7 @@ from altadata.processing.llm_extraction import (
     save_cache,
 )
 from altadata.processing.llm_prompts import (
+    BASE_PROMPT_VERSION,
     PROMPT_VERSION,
     ParcelContext,
     parcel_cache_key,
@@ -147,6 +148,70 @@ def test_extract_structures_coerces_unknown_struct_type() -> None:
     assert out.structures[0].struct_type == "other"
 
 
+def _no_call(_s: str, _u: str) -> LLMResponse:
+    raise AssertionError("provider should not be called on cache hit")
+
+
+def _seed(
+    ain: str, records: list[EpicCase], *, model: str, version: int
+) -> LLMExtraction:
+    return LLMExtraction(
+        key=parcel_cache_key(ain, records, model_id=model, prompt_version=version),
+        ain=ain,
+        extracted_at="2026-01-01T00:00:00Z",
+        model=model,
+        prompt_version=version,
+        input_case_numbers=tuple(str(r.get("CASENUMBER") or "") for r in records),
+        structures=(),
+        reasoning="seeded",
+        input_tokens=0,
+        output_tokens=0,
+    )
+
+
+def test_non_sb1123_reuses_base_version_cache() -> None:
+    """Soft rollout: a non-SB-1123 parcel keys at the base version, so an
+    existing v2 entry still hits even though PROMPT_VERSION advanced — no
+    LLM call, no cold re-run."""
+    provider = _stub_provider(_no_call)
+    record = _record(desc="EATON FIRE - NEW 1500 SF SFR")
+    seeded = _seed(
+        "1234567890", [record], model=provider.model_id, version=BASE_PROMPT_VERSION
+    )
+    cache = ExtractionCache(entries={seeded.key: seeded})
+    out = extract_structures(_ctx(), [record], provider=provider, cache=cache)
+    assert out == seeded
+    assert len(cache.entries) == 1  # nothing new extracted
+
+
+def test_sb1123_misses_base_cache_and_reextracts_at_current_version() -> None:
+    """An SB-1123 parcel keys at PROMPT_VERSION, so a stale v2 entry does not
+    hit; it re-extracts and stores the new version alongside the old one."""
+    record = _record(desc="SB 1123 SUBDIVISION, (4) FEE-SIMPLE SINGLE FAMILY LOTS")
+    provider = _stub_provider(
+        lambda _s, _u: LLMResponse(_good_response_content(), 100, 30)
+    )
+    stale = _seed(
+        "1234567890", [record], model=provider.model_id, version=BASE_PROMPT_VERSION
+    )
+    cache = ExtractionCache(entries={stale.key: stale})
+    out = extract_structures(_ctx(), [record], provider=provider, cache=cache)
+    assert out is not None
+    assert out.prompt_version == PROMPT_VERSION
+    assert out.key != stale.key
+    assert len(cache.entries) == 2  # v2 retained, v3 added
+
+
+def test_fresh_non_sb1123_extraction_stores_base_version() -> None:
+    provider = _stub_provider(
+        lambda _s, _u: LLMResponse(_good_response_content(), 1, 1)
+    )
+    cache = ExtractionCache()
+    out = extract_structures(_ctx(), [_record()], provider=provider, cache=cache)
+    assert out is not None
+    assert out.prompt_version == BASE_PROMPT_VERSION
+
+
 def test_save_and_load_round_trip(tmp_path: Path) -> None:
     extraction = LLMExtraction(
         key="sha256:abc",
@@ -174,7 +239,7 @@ def test_save_and_load_round_trip(tmp_path: Path) -> None:
     loaded = load_cache(path)
     assert loaded.entries[extraction.key] == extraction
     payload = json.loads(path.read_text())
-    assert payload["prompt_version"] == PROMPT_VERSION
+    assert payload["prompt_version"] == BASE_PROMPT_VERSION
     assert len(payload["entries"]) == 1
     assert payload["entries"][0]["input_case_numbers"] == ["UNC-A", "UNC-B"]
 

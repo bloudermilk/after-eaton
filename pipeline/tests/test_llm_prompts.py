@@ -3,12 +3,24 @@
 from __future__ import annotations
 
 from altadata.processing.llm_prompts import (
+    BASE_PROMPT_VERSION,
     PROMPT_VERSION,
     ParcelContext,
+    effective_prompt_version,
     parcel_cache_key,
     render_user_prompt,
 )
 from altadata.sources.schemas import EpicCase
+
+
+def test_effective_prompt_version_scopes_to_sb1123() -> None:
+    assert effective_prompt_version(True) == PROMPT_VERSION
+    assert effective_prompt_version(False) == BASE_PROMPT_VERSION
+
+
+def test_base_version_below_current() -> None:
+    # The soft rollout only avoids work while the base lags the current version.
+    assert BASE_PROMPT_VERSION < PROMPT_VERSION
 
 
 def _record(**overrides: object) -> EpicCase:

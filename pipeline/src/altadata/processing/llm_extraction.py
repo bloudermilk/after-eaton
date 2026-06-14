@@ -18,10 +18,12 @@ from pathlib import Path
 from typing import Any
 
 from ..sources.schemas import EpicCase
+from .description_parser import mentions_sb1123_any
 from .llm_prompts import (
-    PROMPT_VERSION,
+    BASE_PROMPT_VERSION,
     SYSTEM_PROMPT,
     ParcelContext,
+    effective_prompt_version,
     parcel_cache_key,
     render_user_prompt,
 )
@@ -62,7 +64,7 @@ class ExtractionCache:
     """
 
     entries: dict[str, LLMExtraction] = field(default_factory=dict)
-    prompt_version: int = PROMPT_VERSION
+    prompt_version: int = BASE_PROMPT_VERSION
 
 
 def load_cache(path: Path | str) -> ExtractionCache:
@@ -86,7 +88,7 @@ def load_cache(path: Path | str) -> ExtractionCache:
         entries[entry.key] = entry
     return ExtractionCache(
         entries=entries,
-        prompt_version=int(payload.get("prompt_version") or PROMPT_VERSION),
+        prompt_version=int(payload.get("prompt_version") or BASE_PROMPT_VERSION),
     )
 
 
@@ -132,10 +134,24 @@ def extract_structures(
     if not records:
         return None
 
+    # Soft prompt rollout: SB-1123 parcels key at the current PROMPT_VERSION (so
+    # they re-extract under the new prompt); everyone else stays at the base
+    # version and reuses their existing cache entry. See effective_prompt_version.
+    version = effective_prompt_version(
+        any(
+            mentions_sb1123_any(
+                rec.get("DESCRIPTION"),
+                rec.get("PROJECT_NAME"),
+                rec.get("PROJECTNAME"),
+            )
+            for rec in records
+        )
+    )
     key = parcel_cache_key(
         ctx.ain,
         records,
         model_id=provider.model_id,
+        prompt_version=version,
     )
     if key in cache.entries:
         return cache.entries[key]
@@ -162,7 +178,7 @@ def extract_structures(
         ain=ctx.ain,
         extracted_at=_now_iso(),
         model=provider.model_id,
-        prompt_version=PROMPT_VERSION,
+        prompt_version=version,
         input_case_numbers=tuple(str(rec.get("CASENUMBER") or "") for rec in records),
         structures=structures,
         reasoning=str(parsed.get("reasoning") or ""),
@@ -269,7 +285,7 @@ def _entry_from_dict(raw: dict[str, Any]) -> LLMExtraction:
         ain=str(raw["ain"]),
         extracted_at=str(raw.get("extracted_at") or ""),
         model=str(raw.get("model") or ""),
-        prompt_version=int(raw.get("prompt_version") or PROMPT_VERSION),
+        prompt_version=int(raw.get("prompt_version") or BASE_PROMPT_VERSION),
         input_case_numbers=tuple(str(c) for c in (raw.get("input_case_numbers") or [])),
         structures=structures,
         reasoning=str(raw.get("reasoning") or ""),

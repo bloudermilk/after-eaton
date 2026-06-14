@@ -1,8 +1,11 @@
 """Prompts and cache-key derivation for LLM-based structure extraction.
 
-Bump ``PROMPT_VERSION`` whenever the system prompt changes meaningfully —
-that invalidates all cached extractions cleanly. Add a brief note here when
-bumping so downstream readers know what changed.
+Each cache entry is keyed at the prompt version that produced it (see
+``parcel_cache_key`` / ``effective_prompt_version``). When a prompt change only
+affects a subset of parcels, bump ``PROMPT_VERSION`` and scope it in
+``effective_prompt_version`` so the rest keep reusing their cached extractions.
+When a change affects every parcel and a full re-extraction is intended, raise
+``BASE_PROMPT_VERSION`` instead. Add a brief note here when bumping.
 
 History:
 - v1: initial prompt covering plan + permit records, structure-level dedup,
@@ -27,6 +30,23 @@ from datetime import UTC, datetime
 from ..sources.schemas import EpicCase
 
 PROMPT_VERSION = 3
+
+# The version every cached extraction is at least keyed at. The v2→v3 change
+# only added SB-1123 guidance, so only SB-1123 parcels need re-extraction;
+# everyone else stays at BASE and reuses their existing v2 cache entry. Raise
+# this (not just PROMPT_VERSION) to force a full re-run on a parcel-wide change.
+BASE_PROMPT_VERSION = 2
+
+
+def effective_prompt_version(mentions_sb1123: bool) -> int:
+    """Prompt version a parcel's extraction is keyed and stored at.
+
+    Returns ``PROMPT_VERSION`` for parcels whose records mention SB-1123 (so
+    they re-extract under the v3 prompt) and ``BASE_PROMPT_VERSION`` otherwise
+    (so the existing cache is reused). See the module docstring.
+    """
+    return PROMPT_VERSION if mentions_sb1123 else BASE_PROMPT_VERSION
+
 
 _REBUILD_PROGRESS_LABELS: dict[int, str] = {
     1: "Plans Submitted",
@@ -153,9 +173,11 @@ def parcel_cache_key(
     """Deterministic cache key per parcel.
 
     Sorted to be order-independent. Includes model + prompt version so either
-    change invalidates the cache cleanly. Excludes mutable status / progress
-    fields — a permit moving from "Issued" to "Finaled" doesn't change the
-    structure inference.
+    change invalidates the cache cleanly. ``prompt_version`` is the parcel's
+    *effective* version (see ``effective_prompt_version``), which may be below
+    ``PROMPT_VERSION`` — that's what lets a scoped prompt bump reuse the cache
+    for unaffected parcels. Excludes mutable status / progress fields — a permit
+    moving from "Issued" to "Finaled" doesn't change the structure inference.
     """
     parts = sorted(
         (

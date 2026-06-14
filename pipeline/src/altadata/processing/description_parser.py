@@ -123,6 +123,15 @@ def mentions_sb1123(text: str | None) -> bool:
     return _SB1123_RE.search(text) is not None
 
 
+def mentions_sb1123_any(*texts: str | None) -> bool:
+    """True iff SB-1123 is mentioned in any of the given text fields.
+
+    Convenience over the three pathway-bearing fields (DESCRIPTION,
+    PROJECT_NAME, PROJECTNAME) without re-concatenating at each call site.
+    """
+    return any(t and _SB1123_RE.search(t) is not None for t in texts)
+
+
 def extract_lfl_claim(project_name: str | None) -> bool | None:
     """Read the like-for-like claim from PROJECT_NAME.
 

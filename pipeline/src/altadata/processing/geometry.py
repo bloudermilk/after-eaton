@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from shapely.geometry import Point, Polygon
 
-from ..sources.schemas import DinsParcel, EpicCase
+from ..sources.schemas import DinsParcel, EpicCase, FirePerimeter
 from .join import JoinedParcel
 
 
@@ -34,6 +34,27 @@ def dins_polygon_centroid(dins: DinsParcel) -> Point | None:
     # complexity of true multipolygons (interior rings vs. disjoint outer
     # rings) while staying deterministic.
     return max(polygons, key=lambda p: p.area).centroid
+
+
+def bounding_envelope(
+    perimeter: list[FirePerimeter],
+) -> tuple[float, float, float, float]:
+    """Return `(xmin, ymin, xmax, ymax)` in WGS84 spanning all perimeter rings.
+
+    Used to bound the EPIC-LA Case History query to the burn area so we never
+    page the county-wide history. Raises if no polygon geometry is present.
+    """
+    xs: list[float] = []
+    ys: list[float] = []
+    for rec in perimeter:
+        geom = rec.get("_geometry") or {}
+        for ring in geom.get("rings") or []:
+            for point in ring:
+                xs.append(float(point[0]))
+                ys.append(float(point[1]))
+    if not xs:
+        raise ValueError("perimeter has no polygon geometry to bound")
+    return (min(xs), min(ys), max(xs), max(ys))
 
 
 def representative_point(joined: JoinedParcel) -> tuple[float, float] | None:

@@ -72,6 +72,7 @@ jobs:
             data/2020-census-block-groups.geojson
             data/source-dins.json
             data/source-epicla.json
+            data/source-epicla-case-history.json
             data/source-fire-perimeter.json
             data/source-2020-census-tracts.json
             data/source-2020-census-block-groups.json
