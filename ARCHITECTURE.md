@@ -30,6 +30,7 @@ For project overview and data source descriptions, see [README.md](./README.md).
 │  - data-latest (rolling)                   │
 │  Assets:                                   │
 │    parcels.geojson                         │
+│    parcels-compact.geojson                 │
 │    summary.json                            │
 │    qc-report.json                          │
 │    2020-census-tracts.geojson              │
@@ -57,7 +58,7 @@ The site is fully static. There is no backend, no database, and no user state. T
 │       └── deploy.yml            # frontend build + Pages deploy
 ├── pipeline/                     # Python data processing
 │   ├── pyproject.toml
-│   ├── src/after_eaton/
+│   ├── src/altadata/
 │   │   ├── cli.py                # click entrypoint, wires the run
 │   │   ├── sources/              # ArcGIS fetchers + typed schemas
 │   │   ├── processing/           # join, normalize, parse, analyze, aggregate
@@ -79,7 +80,7 @@ The pipeline and frontend are decoupled. The pipeline writes to `data/` locally 
 
 ## Data pipeline
 
-The pipeline is a single Python package, `after_eaton`, exposing one CLI entrypoint (`after-eaton`). A run executes this pipeline in order; if any step fails, no release is published.
+The pipeline is a single Python package, `altadata`, exposing one CLI entrypoint (`altadata`). A run executes this pipeline in order; if any step fails, no release is published.
 
 ```
 fetch DINS                    → sources/dins.py
@@ -106,7 +107,7 @@ QC:
 write qc-report.json
 aggregate to burn-area totals → processing/aggregate.py
 write summary.json
-write parcels.geojson
+write parcels.geojson, parcels-compact.geojson
 write 2020-census-tracts.geojson, 2020-census-block-groups.geojson
 ```
 
@@ -135,7 +136,8 @@ For the analytical contract — what each derived field *means* — see [METHODO
 | `qc/per_record.py` | Per-parcel data-quality warnings. Each warning carries a `severity` of `data` (counts toward threshold) or `info` (real-world ambiguity, surfaced but doesn't gate the run). | `check_record()`, `RecordWarning` |
 | `qc/aggregate.py` | Four hard-fail dataset-level checks. Constants at top of file are tunable. | `check_thresholds()`, `ThresholdCheck`, `QcFailedError` |
 | `qc/report.py` | Formats and writes `qc-report.json`; pretty-prints to stdout. | `QcReport`, `print_report`, `write_report`, `enforce` |
-| `outputs/geojson_writer.py` | Per-feature GeoJSON output. Converts ArcGIS rings to GeoJSON Polygon/MultiPolygon (`esri_to_geojson` is reused by the region writer). | `write_parcels_geojson()`, `esri_to_geojson()` |
+| `outputs/geojson_writer.py` | Per-feature GeoJSON output. Converts ArcGIS rings to GeoJSON Polygon/MultiPolygon (`esri_to_geojson` is reused by the region writer). Also writes the web-optimized point file (`parcels-compact.geojson`) via `representative_point` + the shared bucket classifiers. | `write_parcels_geojson()`, `write_parcels_compact_geojson()`, `esri_to_geojson()` |
+| `processing/geometry.py` | Per-parcel point geometry: `dins_polygon_centroid` (used for region assignment) and `representative_point` (EPIC-LA case point preferred, DINS centroid fallback; used by the compact writer). | `dins_polygon_centroid()`, `representative_point()` |
 | `outputs/region_writer.py` | FeatureCollection writer for tract / block-group GeoJSONs. | `write_regions_geojson()` |
 | `outputs/summary_writer.py` | Dump `SummaryResult` as JSON. | `write_summary_json()` |
 | `outputs/raw_writer.py` | Snapshot raw fetched records to disk for reproducibility. | `write_raw_records()` |
@@ -187,8 +189,9 @@ All outputs are written to `data/` locally and uploaded as Release assets in CI:
 
 | File | Format | Contents |
 |---|---|---|
-| `parcels.geojson` | GeoJSON FeatureCollection | One feature per Altadena parcel; attributes per `ParcelResult`. See METHODOLOGY.md for field-by-field semantics. |
-| `parcels.csv` | CSV | Same per-parcel attributes, no geometry. End-user-friendly download surfaced in the site footer. |
+| `parcels.geojson` | GeoJSON FeatureCollection | One **Polygon** feature per Altadena parcel; full set of attributes per `ParcelResult`. Full-fidelity source of record. See METHODOLOGY.md for field-by-field semantics. |
+| `parcels-compact.geojson` | GeoJSON FeatureCollection | Web-optimized: one **Point** per parcel (centroid via `representative_point` — EPIC-LA case point preferred, DINS polygon centroid fallback) carrying only the attributes the frontend map reads (`ain`, `address`, `sfr_size_bucket`, `lfl_bucket`, `adu_bucket`, `adds_sb9`). The per-parcel bucket keys come from the same classifiers that produce `summary.json`'s counts, so the map can never drift from the summary. |
+| `parcels.csv` | CSV | Same per-parcel attributes as `parcels.geojson`, no geometry. End-user-friendly download surfaced in the site footer. |
 | `summary.json` | JSON object | Burn-area totals (counts). |
 | `qc-report.json` | JSON object | Pass/fail of every threshold + every per-record warning that fired. |
 | `2020-census-tracts.geojson` | GeoJSON FeatureCollection | One feature per 2020 census tract intersecting the perimeter; attributes are identifiers (`ct20`, `label`) plus every `RegionCounts` field. |
@@ -203,7 +206,7 @@ The LLM extraction cache (`llm-extraction-cache.json`) is **not** part of the pu
 
 Every output carries a `generated_at` ISO 8601 timestamp:
 - `summary.json`, `qc-report.json`, `source-dins.json`, `source-epicla.json`, `source-fire-perimeter.json`, `source-2020-census-tracts.json`, `source-2020-census-block-groups.json`: top-level field (`fetched_at` on raw source files)
-- `parcels.geojson`, `2020-census-tracts.geojson`, `2020-census-block-groups.geojson`: `metadata.generated_at` on the FeatureCollection
+- `parcels.geojson`, `parcels-compact.geojson`, `2020-census-tracts.geojson`, `2020-census-block-groups.geojson`: `metadata.generated_at` on the FeatureCollection
 
 ### Schedule
 
@@ -259,7 +262,7 @@ https://github.com/bloudermilk/after-eaton/releases/download/data-latest/source-
 
 We use the explicit `data-latest` tag rather than `/releases/latest/download/` because `latest` resolves by GitHub's own ordering rules (most recent non-prerelease) and could behave unexpectedly when a dated release and the rolling tag are both updated in the same run.
 
-The frontend does **not** fetch these URLs directly at runtime. The deploy workflow downloads `summary.json`, `qc-report.json`, and `parcels.csv` into `web/public/data/` at build time so the published site serves them same-origin from GitHub Pages — no CORS surface, no third-party runtime dependency. Because data is baked into the deploy, every successful pipeline run triggers a fresh deploy via the `workflow_run` event (see `.github/workflows/deploy.yml`).
+The frontend does **not** fetch these URLs directly at runtime. The deploy workflow downloads `summary.json`, `qc-report.json`, `parcels.csv`, and `parcels-compact.geojson` (the map layer) into `web/public/data/` at build time so the published site serves them same-origin from GitHub Pages — no CORS surface, no third-party runtime dependency. Because data is baked into the deploy, every successful pipeline run triggers a fresh deploy via the `workflow_run` event (see `.github/workflows/deploy.yml`).
 
 Retention: keep all dated releases indefinitely. They are small and provide an audit trail of how rebuild progress changed over time.
 
@@ -315,7 +318,7 @@ The site fetches `summary.json` and `qc-report.json` from same-origin (`./data/.
 
 The build step runs `gh release download data-latest` to populate `web/public/data/` before `npm run build`, so the resulting `dist/` is self-contained — no third-party runtime fetches.
 
-**One-time manual setup:** in repo Settings → Pages, set the source to "GitHub Actions". `vite.config.ts` sets `base: '/after-eaton/'` for the project-page URL.
+**One-time manual setup:** in repo Settings → Pages, set the source to "GitHub Actions" and set the custom domain to `altadata.org`. `web/public/CNAME` carries that domain into every build artifact (GitHub Pages requires the file in the published root), and `vite.config.ts` sets `base: '/'` to serve from the apex.
 
 ## Local development
 
@@ -336,12 +339,12 @@ uv venv --python 3.11
 uv pip install -e ".[dev]"
 ```
 
-This installs the `after-eaton` console script into the venv.
+This installs the `altadata` console script into the venv.
 
 **Run end-to-end against live ArcGIS data:**
 
 ```bash
-.venv/bin/after-eaton --out-dir ../data
+.venv/bin/altadata --out-dir ../data
 ```
 
 Flags:
@@ -366,7 +369,7 @@ Exit codes:
 .venv/bin/pytest tests/test_foo.py     # one file
 ```
 
-**Tuning thresholds:** edit the constants at the top of `pipeline/src/after_eaton/qc/aggregate.py` (`DESCRIPTION_PARSE_MIN_RATE`, etc.). The names are stable for ops review.
+**Tuning thresholds:** edit the constants at the top of `pipeline/src/altadata/qc/aggregate.py` (`DESCRIPTION_PARSE_MIN_RATE`, etc.). The names are stable for ops review.
 
 ### Frontend
 
@@ -380,7 +383,7 @@ npm install
 **Run locally:**
 
 ```bash
-npm run data:fetch-local      # copies ../data/*.json + parcels.csv → public/data/
+npm run data:fetch-local      # copies ../data/*.json + parcels.csv + parcels-compact.geojson → public/data/
 # or: npm run data:fetch-release   # mirrors what CI does, via the gh CLI
 npm run dev
 ```
@@ -418,7 +421,7 @@ tests/
 
 1. **Unit tests** (`test_description_parser.py`, `test_aggregate.py`, `test_lfl_resolution.py`) — fast, in-memory, no fixtures. Cover parser regex edge cases, aggregate counting, and LFL precedence rules.
 2. **QA regression tests** (`test_parcel_analysis.py`) — load every JSON file under `tests/fixtures/qa/` and assert `analyze_parcel()` produces the values listed under `expected`. Each fixture file becomes one parametrized test case automatically — adding a new validated parcel requires only dropping a JSON file, no code change.
-3. **End-to-end smoke** — running `after-eaton` against live ArcGIS produces the canonical outputs. Not yet automated in CI; today it's an interactive check before merge.
+3. **End-to-end smoke** — running `altadata` against live ArcGIS produces the canonical outputs. Not yet automated in CI; today it's an interactive check before merge.
 
 **QA fixture format:**
 

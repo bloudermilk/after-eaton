@@ -1,6 +1,6 @@
 # Design Plan
 
-The web interface for After Eaton is an interactive single-page application designed with the following goals in mind:
+The web interface for Altadata is an interactive single-page application designed with the following goals in mind:
 * Intuitive and usable by non-technical and technical people alike
 * Accessible to people with disabilities or impairments
 * Simple design and aesthetically refined

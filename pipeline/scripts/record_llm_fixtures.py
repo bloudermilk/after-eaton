@@ -19,17 +19,17 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from after_eaton.processing.llm_extraction import (
+from altadata.processing.llm_extraction import (
     ExtractionCache,
     extract_structures,
 )
-from after_eaton.processing.llm_prompts import (
+from altadata.processing.llm_prompts import (
     SYSTEM_PROMPT,
     ParcelContext,
     render_user_prompt,
 )
-from after_eaton.processing.llm_provider import OpenRouterProvider
-from after_eaton.sources.schemas import EpicCase
+from altadata.processing.llm_provider import OpenRouterProvider
+from altadata.sources.schemas import EpicCase
 
 QA_AINS = ["5841026011", "5828018010", "5845014011", "5845016021"]
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "llm"

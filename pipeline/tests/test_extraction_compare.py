@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from after_eaton.processing.extraction_compare import (
+from altadata.processing.extraction_compare import (
     ExtractionRunInfo,
     compare_extractions,
     derive_post_from_llm,
     extraction_metrics,
 )
-from after_eaton.processing.llm_extraction import (
+from altadata.processing.llm_extraction import (
     ExtractedStructure,
     LLMExtraction,
 )
-from after_eaton.processing.parcel_analysis import PostFire
-from after_eaton.qc.per_record import RecordWarning
+from altadata.processing.parcel_analysis import PostFire
+from altadata.qc.per_record import RecordWarning
 
 
 def _extraction(*structures: ExtractedStructure, reasoning: str = "") -> LLMExtraction:

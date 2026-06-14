@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from after_eaton.processing.normalize import BsdStatus, DamageLevel
-from after_eaton.processing.parcel_analysis import ParcelResult
-from after_eaton.processing.spatial_aggregate import aggregate_by_region
-from after_eaton.sources.schemas import DinsParcel
+from altadata.processing.normalize import BsdStatus, DamageLevel
+from altadata.processing.parcel_analysis import ParcelResult
+from altadata.processing.spatial_aggregate import aggregate_by_region
+from altadata.sources.schemas import DinsParcel
 
 
 def _square(cx: float, cy: float, half: float = 0.5) -> dict[str, Any]:

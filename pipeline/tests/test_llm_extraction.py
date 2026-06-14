@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from after_eaton.processing.llm_extraction import (
+from altadata.processing.llm_extraction import (
     ExtractedStructure,
     ExtractionCache,
     LLMExtraction,
@@ -18,13 +18,13 @@ from after_eaton.processing.llm_extraction import (
     prune_cache,
     save_cache,
 )
-from after_eaton.processing.llm_prompts import (
+from altadata.processing.llm_prompts import (
     PROMPT_VERSION,
     ParcelContext,
     parcel_cache_key,
 )
-from after_eaton.processing.llm_provider import LLMResponse, OpenRouterProvider
-from after_eaton.sources.schemas import EpicCase
+from altadata.processing.llm_provider import LLMResponse, OpenRouterProvider
+from altadata.sources.schemas import EpicCase
 
 
 def _ctx(ain: str = "1234567890") -> ParcelContext:

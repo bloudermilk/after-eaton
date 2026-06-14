@@ -74,7 +74,10 @@ _DAMAGED_LEVELS = {
 }
 
 
-def _sfr_size_bucket(parcel: ParcelResult) -> str:
+# Per-parcel bucket classifiers. These are the single source of truth for
+# both the published counts below and the per-parcel bucket properties on
+# `parcels-compact.geojson`, so the map can never drift from the summary.
+def sfr_size_bucket(parcel: ParcelResult) -> str:
     pre = parcel.pre_sfr_sqft
     post = parcel.post_sfr_sqft
     if pre is None or post is None or pre <= 0:
@@ -93,6 +96,30 @@ def _sfr_size_bucket(parcel: ParcelResult) -> str:
     if ratio <= 1.30:
         return "larger_10_to_30"
     return "larger_over_30"
+
+
+def lfl_bucket(parcel: ParcelResult) -> str:
+    """Like-for-like classification. `none` = parcel has no permit at all;
+    `unknown` = has a permit but no clear LFL/Custom claim."""
+    if parcel.lfl_claimed is True:
+        return "lfl"
+    if parcel.lfl_claimed is False:
+        return "nlfl"
+    if parcel.rebuild_progress_num is not None:
+        return "unknown"
+    return "none"
+
+
+def adu_bucket(parcel: ParcelResult) -> str:
+    """How many ADUs the parcel added relative to pre-fire. `none` = added 0."""
+    added = parcel.added_adu_count
+    if added == 1:
+        return "added_1"
+    if added == 2:
+        return "added_2"
+    if added >= 3:
+        return "added_3_plus"
+    return "none"
 
 
 def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
@@ -115,15 +142,12 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
     construction = sum(1 for p in parcels if p.rebuild_progress_num == 6)
     completed = sum(1 for p in parcels if p.rebuild_progress_num == 7)
 
-    lfl = sum(1 for p in parcels if p.lfl_claimed is True)
-    nlfl = sum(1 for p in parcels if p.lfl_claimed is False)
     # "Unknown" only counts parcels that have a permit but no LFL signal —
-    # parcels with no permit at all are tracked separately by no_permit_count.
-    lfl_unknown = sum(
-        1
-        for p in parcels
-        if p.lfl_claimed is None and p.rebuild_progress_num is not None
-    )
+    # parcels with no permit at all fall in the `none` bucket and are tracked
+    # separately by no_permit_count.
+    lfl = sum(1 for p in parcels if lfl_bucket(p) == "lfl")
+    nlfl = sum(1 for p in parcels if lfl_bucket(p) == "nlfl")
+    lfl_unknown = sum(1 for p in parcels if lfl_bucket(p) == "unknown")
 
     size_buckets = {
         "smaller_over_30": 0,
@@ -134,13 +158,13 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
         "unknown": 0,
     }
     for p in parcels:
-        size_buckets[_sfr_size_bucket(p)] += 1
+        size_buckets[sfr_size_bucket(p)] += 1
 
     sb9 = sum(1 for p in parcels if p.adds_sb9)
     sb1123 = sum(1 for p in parcels if p.adds_sb1123)
-    adu_added_1 = sum(1 for p in parcels if p.added_adu_count == 1)
-    adu_added_2 = sum(1 for p in parcels if p.added_adu_count == 2)
-    adu_added_3_plus = sum(1 for p in parcels if p.added_adu_count >= 3)
+    adu_added_1 = sum(1 for p in parcels if adu_bucket(p) == "added_1")
+    adu_added_2 = sum(1 for p in parcels if adu_bucket(p) == "added_2")
+    adu_added_3_plus = sum(1 for p in parcels if adu_bucket(p) == "added_3_plus")
 
     dwelling_rebuild = sum(
         1 for p in parcels if (p.post_sfr_count or 0) > 0 or (p.post_adu_count or 0) > 0

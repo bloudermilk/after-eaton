@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from after_eaton.processing.aggregate import RegionCounts
-from after_eaton.processing.normalize import BsdStatus, DamageLevel
-from after_eaton.processing.parcel_analysis import ParcelResult
-from after_eaton.processing.spatial_aggregate import (
+from altadata.processing.aggregate import RegionCounts
+from altadata.processing.normalize import BsdStatus, DamageLevel
+from altadata.processing.parcel_analysis import ParcelResult
+from altadata.processing.spatial_aggregate import (
     RegionFeature,
     SpatialAggregation,
 )
-from after_eaton.qc.aggregate import check_thresholds
+from altadata.qc.aggregate import check_thresholds
 
 
 def _result(ain: str) -> ParcelResult:

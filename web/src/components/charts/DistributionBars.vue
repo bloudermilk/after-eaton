@@ -2,6 +2,8 @@
 import { computed } from "vue";
 
 interface Bucket {
+  // Map bucket key; when present the bar is clickable and selects on the map.
+  key?: string;
   label: string;
   value: number;
   color?: string;
@@ -14,7 +16,11 @@ const props = defineProps<{
   // rebuilding), which can differ from the chart total when buckets only
   // cover part of that universe.
   denominator?: number;
+  // Key of the currently selected bucket (dims the others).
+  selectedBucket?: string | null;
 }>();
+
+const emit = defineEmits<{ select: [key: string] }>();
 
 const max = computed(() => Math.max(1, ...props.buckets.map((b) => b.value)));
 const showPct = computed(() => !!props.denominator && props.denominator > 0);
@@ -22,6 +28,14 @@ const showPct = computed(() => !!props.denominator && props.denominator > 0);
 function formatPct(value: number): string {
   if (!showPct.value) return "";
   return `${((value / (props.denominator ?? 1)) * 100).toFixed(1)}%`;
+}
+
+function isDim(b: Bucket): boolean {
+  return props.selectedBucket != null && b.key !== props.selectedBucket;
+}
+
+function onSelect(b: Bucket): void {
+  if (b.key) emit("select", b.key);
 }
 </script>
 
@@ -31,8 +45,16 @@ function formatPct(value: number): string {
        this, count widths shift the percent column row-to-row. -->
   <ul class="dist__grid" :class="{ 'dist__grid--with-pct': showPct }">
     <li v-for="bucket in buckets" :key="bucket.label" class="dist__row">
-      <div class="dist__label">{{ bucket.label }}</div>
-      <div class="dist__bar-track">
+      <div class="dist__label" :class="{ 'is-dim': isDim(bucket) }">{{ bucket.label }}</div>
+      <button
+        type="button"
+        class="dist__bar-track"
+        :class="{ 'is-dim': isDim(bucket), 'is-selected': bucket.key === selectedBucket }"
+        :disabled="!bucket.key"
+        :aria-pressed="bucket.key ? bucket.key === selectedBucket : undefined"
+        :aria-label="`${bucket.label}: ${bucket.value.toLocaleString()}`"
+        @click="onSelect(bucket)"
+      >
         <div
           class="dist__bar"
           :style="{
@@ -40,9 +62,13 @@ function formatPct(value: number): string {
             backgroundColor: bucket.color ?? 'var(--color-poppy)',
           }"
         />
+      </button>
+      <div class="dist__count" :class="{ 'is-dim': isDim(bucket) }">
+        {{ bucket.value.toLocaleString() }}
       </div>
-      <div class="dist__count">{{ bucket.value.toLocaleString() }}</div>
-      <div v-if="showPct" class="dist__pct">{{ formatPct(bucket.value) }}</div>
+      <div v-if="showPct" class="dist__pct" :class="{ 'is-dim': isDim(bucket) }">
+        {{ formatPct(bucket.value) }}
+      </div>
     </li>
   </ul>
 </template>
@@ -76,12 +102,35 @@ function formatPct(value: number): string {
   border-radius: var(--radius-sm);
   height: 14px;
   overflow: hidden;
+  appearance: none;
+  border: 0;
+  padding: 0;
+  width: 100%;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.dist__bar-track:disabled {
+  cursor: default;
+}
+
+.dist__bar-track:focus-visible {
+  outline: 2px solid var(--color-poppy);
+  outline-offset: 2px;
+}
+
+.dist__bar-track.is-selected {
+  box-shadow: inset 0 0 0 2px var(--color-ink);
 }
 
 .dist__bar {
   height: 100%;
   border-radius: var(--radius-sm);
   min-width: 2px;
+}
+
+.is-dim {
+  opacity: 0.3;
 }
 
 .dist__count {

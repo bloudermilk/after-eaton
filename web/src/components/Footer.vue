@@ -24,7 +24,7 @@ const dataAsOfLabel = computed(() => {
     <div class="site-footer__inner">
       <div class="site-footer__about">
         <p>
-          <strong>After Eaton</strong> is free and open source. Built by Altadenans, for Altadena.
+          <strong>Altadata</strong> is free and open source. Built by Altadenans, for Altadena.
           <a :href="REPO_URL" target="_blank" rel="noopener">View source on GitHub</a>.
         </p>
         <p v-if="dataAsOfLabel" class="site-footer__pill">Data as of {{ dataAsOfLabel }}</p>

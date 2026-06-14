@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from after_eaton.processing.join import JoinedParcel
-from after_eaton.processing.parcel_analysis import analyze_parcel
+from altadata.processing.join import JoinedParcel
+from altadata.processing.parcel_analysis import analyze_parcel
 
 # Epoch-ms timestamps used to control case ordering in tests.
 T_OLDER = 1_700_000_000_000

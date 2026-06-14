@@ -12,13 +12,14 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from shapely.geometry import Polygon, shape
+from shapely.geometry import shape
 from shapely.geometry.base import BaseGeometry
 from shapely.strtree import STRtree
 
 from ..outputs.geojson_writer import esri_to_geojson
 from ..sources.schemas import DinsParcel
 from .aggregate import RegionCounts, count_parcels
+from .geometry import dins_polygon_centroid
 from .parcel_analysis import ParcelResult
 
 logger = logging.getLogger(__name__)
@@ -76,7 +77,7 @@ def aggregate_by_region(
 
     unassigned: list[str] = []
     for result, dins in parcels:
-        centroid = _parcel_centroid(dins)
+        centroid = dins_polygon_centroid(dins)
         if centroid is None or tree is None:
             unassigned.append(result.ain)
             continue
@@ -106,25 +107,6 @@ def aggregate_by_region(
             )
         )
     return SpatialAggregation(features=features, unassigned_ains=unassigned)
-
-
-def _parcel_centroid(dins: DinsParcel) -> BaseGeometry | None:
-    geom = dins.get("_geometry") or {}
-    rings = geom.get("rings") or []
-    if not rings:
-        return None
-    polygons: list[Polygon] = []
-    for ring in rings:
-        if len(ring) >= 3:
-            polygons.append(Polygon(ring))
-    if not polygons:
-        return None
-    if len(polygons) == 1:
-        return polygons[0].centroid
-    # Multi-ring parcel: take the largest ring's centroid. Avoids the
-    # complexity of true multipolygons (interior rings vs. disjoint outer
-    # rings) while staying deterministic.
-    return max(polygons, key=lambda p: p.area).centroid
 
 
 def _region_polygon(region: dict[str, Any]) -> BaseGeometry | None:

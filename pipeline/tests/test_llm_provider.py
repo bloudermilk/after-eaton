@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pytest_httpx import HTTPXMock
 
-from after_eaton.processing.llm_provider import LLMError, OpenRouterProvider
+from altadata.processing.llm_provider import LLMError, OpenRouterProvider
 
 
 @pytest.fixture(autouse=True)

@@ -1,8 +1,10 @@
 import { createRouter, createWebHashHistory } from "vue-router";
 
-import Home from "@/pages/Home.vue";
-import Methodology from "@/pages/Methodology.vue";
-import QualityControl from "@/pages/QualityControl.vue";
+// Lazily loaded so the heavy map dependency (maplibre-gl, pulled in by Home)
+// is code-split into its own chunk instead of bloating the initial bundle.
+const Home = () => import("@/pages/Home.vue");
+const Methodology = () => import("@/pages/Methodology.vue");
+const QualityControl = () => import("@/pages/QualityControl.vue");
 
 export const router = createRouter({
   history: createWebHashHistory(),

@@ -12,7 +12,10 @@ import click
 from dotenv import load_dotenv
 
 from .outputs.csv_writer import write_parcels_csv
-from .outputs.geojson_writer import write_parcels_geojson
+from .outputs.geojson_writer import (
+    write_parcels_compact_geojson,
+    write_parcels_geojson,
+)
 from .outputs.raw_writer import write_raw_records
 from .outputs.region_writer import write_regions_geojson
 from .outputs.summary_writer import write_summary_json
@@ -48,7 +51,7 @@ from .sources.dins import fetch_dins_parcels
 from .sources.epicla import fetch_epicla_cases
 from .sources.fire_perimeter import fetch_fire_perimeter
 
-logger = logging.getLogger("after_eaton")
+logger = logging.getLogger("altadata")
 
 
 @click.command()
@@ -247,6 +250,11 @@ def run(
     write_summary_json(summary, out_dir / "summary.json")
 
     write_parcels_geojson(pairs, out_dir / "parcels.geojson", generated_at=generated_at)
+    write_parcels_compact_geojson(
+        list(zip(results, joined, strict=True)),
+        out_dir / "parcels-compact.geojson",
+        generated_at=generated_at,
+    )
     write_parcels_csv(results, out_dir / "parcels.csv")
 
     write_regions_geojson(
