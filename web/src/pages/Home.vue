@@ -278,7 +278,7 @@ const dataAsOfLabel = computed(() => {
   }
 
   .home__rail {
-    flex: 0 0 360px;
+    flex: 0 0 400px;
     flex-direction: column;
     max-width: 40%;
     overflow-x: hidden;
