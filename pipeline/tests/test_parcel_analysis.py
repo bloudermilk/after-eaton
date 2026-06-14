@@ -27,3 +27,19 @@ def test_qa_parcel_matches_expected(qa_fixture: dict[str, Any]) -> None:
     assert result.rebuild_progress_num == expected["rebuild_progress_num"]
     assert result.lfl_claimed == expected["lfl_claimed"]
     assert result.sfr_size_comparison == expected["sfr_size_comparison"]
+
+    # Independent rebuild-progress milestones (optional per fixture). The case
+    # counts are checked as a whole dict so a missing or extra milestone fails.
+    milestones = expected.get("rebuild_milestone_cases")
+    if milestones is not None:
+        assert {
+            "app_received": result.rebuild_app_received_cases,
+            "zoning_cleared": result.rebuild_zoning_cleared_cases,
+            "plans_received": result.rebuild_plans_received_cases,
+            "plans_approved": result.rebuild_plans_approved_cases,
+            "permit_issued": result.rebuild_permit_issued_cases,
+            "in_construction": result.rebuild_in_construction_cases,
+            "construction_completed": result.rebuild_construction_completed_cases,
+        } == milestones
+    if "rebuild_stage" in expected:
+        assert result.rebuild_stage == expected["rebuild_stage"]

@@ -12,7 +12,14 @@ import {
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 
 import { ALTADENA_BOUNDS, BASEMAP_STYLE_URL } from "@/constants";
-import { getMetric, metricColor, metricFilter, NEUTRAL_DOT } from "@/metrics";
+import {
+  getMetric,
+  metricColor,
+  metricColorStage,
+  metricFilter,
+  metricFilterStage,
+  NEUTRAL_DOT,
+} from "@/metrics";
 import type { ParcelFeatureCollection } from "@/types";
 
 const props = defineProps<{
@@ -88,6 +95,13 @@ function applySelection(): void {
     // Default state: every parcel, one neutral color.
     m.setFilter(LAYER_ID, null);
     m.setPaintProperty(LAYER_ID, "circle-color", NEUTRAL_DOT);
+    return;
+  }
+  if (metric.mapMode === "stage") {
+    // Color every damaged parcel by its current (furthest) stage; a selected
+    // milestone narrows the layer to the parcels exactly at that stage.
+    m.setFilter(LAYER_ID, metricFilterStage(metric, props.activeBucket));
+    m.setPaintProperty(LAYER_ID, "circle-color", metricColorStage(metric));
     return;
   }
   m.setFilter(LAYER_ID, metricFilter(metric, props.activeBucket));

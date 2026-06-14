@@ -105,6 +105,18 @@ class EpicCase(TypedDict, total=False):
     JUNIOR_ADU: NotRequired[float | None]
     STAT_CLASS: NotRequired[str | None]
     REBUILD_PROGRESS: NotRequired[str | None]
+    # Independent rebuild-progress milestone fields. Each holds the milestone's
+    # label string once the case reaches it, else null. They are NOT nested —
+    # a case can carry a later milestone without an earlier one — so they must
+    # be read independently rather than derived from REBUILD_PROGRESS_NUM (the
+    # latest-stage field, which LA County says not to use for statistics).
+    REBUILD_APP_RECEIVED: NotRequired[str | None]
+    ZONING_REV_CLEARED: NotRequired[str | None]
+    BUILD_PLAN_REV_PROC: NotRequired[str | None]
+    BUILD_PLAN_APPROVED: NotRequired[str | None]
+    BUILD_PERMIT_ISSUED: NotRequired[str | None]
+    REBUILD_IN_CONS: NotRequired[str | None]
+    CONS_COMPLETED: NotRequired[str | None]
     APPLY_DATE: NotRequired[float | None]
     COMPLETE_DATE: NotRequired[float | None]
     ISSUANCE_DATE: NotRequired[float | None]

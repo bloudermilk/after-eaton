@@ -29,6 +29,10 @@ function bucketsFor(metricId: string) {
     .filter((b) => b.value > 0);
 }
 
+const rebuildItems = computed(() => bucketsFor("rebuild_progress"));
+// The funnel's first bucket, "Damaged or destroyed" (bsd_red_or_yellow_count),
+// is the 100% baseline; every milestone's percentage is a share of it.
+const affectedDenominator = computed(() => summary.value?.bsd_red_or_yellow_count ?? 0);
 const sfrBuckets = computed(() => bucketsFor("sfr_size"));
 const lflItems = computed(() => bucketsFor("lfl"));
 const aduItems = computed(() => bucketsFor("adu"));
@@ -85,6 +89,53 @@ const dataAsOfLabel = computed(() => {
         </p>
         <p v-if="dataAsOfLabel" class="home__pill">Data as of {{ dataAsOfLabel }}</p>
       </div>
+
+      <StatCard
+        title="Rebuild progress"
+        subtitle="Permitting milestones reached"
+        interactive
+        :active="activeMetricId === 'rebuild_progress'"
+        class="home__card"
+        @click="centerCardOnTap"
+        @toggle="toggleMetric('rebuild_progress')"
+      >
+        <template #info>
+          <InfoButton title="Rebuild progress">
+            <p>
+              <strong>Damaged or destroyed</strong> is the funnel's baseline (100%): Altadena
+              parcels the County Red- or Yellow-tagged in its post-fire Safety Assessment — the same
+              parcels LA County publishes as its "Damaged/Destroyed Parcels." Each milestone's
+              percentage is the share of those parcels that have reached it.
+            </p>
+            <p>
+              The rows below count Altadena parcels that have reached a milestone in LA County's
+              rebuild permitting process — from the recovery application through completed
+              construction. A parcel counts toward a milestone if any of its fire cases reached it.
+            </p>
+            <p>
+              We report the funnel <strong>cumulatively</strong>: a parcel is counted at every stage
+              up to the furthest one it reached, so the counts decline at each later stage. A
+              parcel's map dot is colored by that furthest stage. This is a deliberate
+              simplification of LA County's own dashboard, which counts each milestone independently
+              and so is <em>not</em> strictly declining (a case can be recorded at a later stage
+              without an earlier one). Construction milestones (the last two) count new residential
+              work, per the source data.
+            </p>
+            <p>
+              <strong>On the map:</strong> by default every damaged parcel is shown, colored by the
+              furthest stage it has reached. Tapping a row narrows the map to the parcels
+              <em>currently at</em> that stage — so they share one color, and fewer dots light up
+              than the row's cumulative count.
+            </p>
+          </InfoButton>
+        </template>
+        <MetricList
+          :items="rebuildItems"
+          :denominator="affectedDenominator"
+          :selected-bucket="selectedFor('rebuild_progress')"
+          @select="(key) => selectBucket('rebuild_progress', key)"
+        />
+      </StatCard>
 
       <StatCard
         title="Relative size"

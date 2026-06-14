@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 
-from .normalize import BsdStatus, DamageLevel
+from .normalize import REBUILD_STAGES, BsdStatus, DamageLevel
 from .parcel_analysis import ParcelResult
 
 
@@ -26,11 +26,21 @@ class RegionCounts:
     bsd_yellow_count: int
     bsd_green_count: int
     bsd_red_or_yellow_count: int
-    no_permit_count: int
-    permit_in_review_count: int
-    permit_issued_count: int
-    construction_count: int
-    completed_count: int
+    # Rebuild-progress funnel: parcels at or beyond each milestone. A parcel is
+    # counted at every stage up to and including the furthest one it reached
+    # (`rebuild_stage`), so these counts are MONOTONIC — they decline by
+    # construction. This intentionally differs from LA County's case-level
+    # dashboard, which counts each milestone independently and is non-monotonic;
+    # the per-parcel `rebuild_*_cases` fields on parcels.geojson / parcels.csv
+    # preserve that case-level view for a future feature and are not surfaced in
+    # the app today. See METHODOLOGY.md -> Rebuild progress.
+    rebuild_app_received_parcels: int
+    rebuild_zoning_cleared_parcels: int
+    rebuild_plans_received_parcels: int
+    rebuild_plans_approved_parcels: int
+    rebuild_permit_issued_parcels: int
+    rebuild_in_construction_parcels: int
+    rebuild_construction_completed_parcels: int
     lfl_count: int
     nlfl_count: int
     lfl_unknown_count: int
@@ -136,15 +146,18 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
     bsd_yellow = sum(1 for p in parcels if p.bsd_status == BsdStatus.YELLOW)
     bsd_green = sum(1 for p in parcels if p.bsd_status == BsdStatus.GREEN)
 
-    no_permit = sum(1 for p in parcels if p.rebuild_progress_num is None)
-    in_review = sum(1 for p in parcels if p.rebuild_progress_num in (1, 2, 3, 4))
-    issued = sum(1 for p in parcels if p.rebuild_progress_num == 5)
-    construction = sum(1 for p in parcels if p.rebuild_progress_num == 6)
-    completed = sum(1 for p in parcels if p.rebuild_progress_num == 7)
+    # Monotonic funnel: a parcel counts toward a stage when its furthest
+    # milestone reached (`rebuild_stage`) is at or beyond that stage — i.e. we
+    # assume a parcel at stage N also passed every earlier stage, so the counts
+    # strictly decline. (LA County's dashboard is non-monotonic; see the
+    # RegionCounts docstring and METHODOLOGY.md -> Rebuild progress.)
+    rebuild = {
+        key: sum(1 for p in parcels if p.rebuild_stage >= num)
+        for num, key, _ in REBUILD_STAGES
+    }
 
     # "Unknown" only counts parcels that have a permit but no LFL signal —
-    # parcels with no permit at all fall in the `none` bucket and are tracked
-    # separately by no_permit_count.
+    # parcels with no permit at all fall in the `none` bucket (not counted here).
     lfl = sum(1 for p in parcels if lfl_bucket(p) == "lfl")
     nlfl = sum(1 for p in parcels if lfl_bucket(p) == "nlfl")
     lfl_unknown = sum(1 for p in parcels if lfl_bucket(p) == "unknown")
@@ -178,11 +191,13 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
         bsd_yellow_count=bsd_yellow,
         bsd_green_count=bsd_green,
         bsd_red_or_yellow_count=bsd_red + bsd_yellow,
-        no_permit_count=no_permit,
-        permit_in_review_count=in_review,
-        permit_issued_count=issued,
-        construction_count=construction,
-        completed_count=completed,
+        rebuild_app_received_parcels=rebuild["app_received"],
+        rebuild_zoning_cleared_parcels=rebuild["zoning_cleared"],
+        rebuild_plans_received_parcels=rebuild["plans_received"],
+        rebuild_plans_approved_parcels=rebuild["plans_approved"],
+        rebuild_permit_issued_parcels=rebuild["permit_issued"],
+        rebuild_in_construction_parcels=rebuild["in_construction"],
+        rebuild_construction_completed_parcels=rebuild["construction_completed"],
         lfl_count=lfl,
         nlfl_count=nlfl,
         lfl_unknown_count=lfl_unknown,

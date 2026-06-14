@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from ..sources.schemas import CASE_HISTORY_SOURCE, DinsParcel, EpicCase
 from .description_parser import (
@@ -18,6 +18,7 @@ from .description_parser import (
 )
 from .join import JoinedParcel
 from .normalize import (
+    REBUILD_STAGES,
     BsdStatus,
     DamageLevel,
     normalize_bsd,
@@ -75,7 +76,10 @@ class ParcelResult:
     # outcome — same shape as `lfl_conflict`.
     sb_pathway_conflict: bool
     added_adu_count: int
-    # Progress
+    # Progress (latest stage). Kept for the like-for-like "has a permit" test
+    # and the QC completed-rebuilds sanity check — NOT for the per-stage funnel
+    # counts below, which the source documentation says must not be derived from
+    # the latest-stage field.
     rebuild_progress_num: int | None
     rebuild_progress: str | None
     # Pass-through DINS fields
@@ -83,6 +87,23 @@ class ParcelResult:
     roe_status: str | None
     debris_cleared: str | None
     dins_count: int
+    # Independent rebuild-progress milestones (see normalize.REBUILD_STAGES).
+    # Per-parcel CASE COUNTS: how many of the parcel's fire cases have reached
+    # each milestone. Summing a field across all parcels reproduces LA County's
+    # case-level (non-monotonic) funnel. These are RETAINED for a future
+    # case-level view and are not surfaced in the app today — the published
+    # summary counts and the map use the monotonic `rebuild_stage` instead.
+    # Defaults keep test constructors terse; analyze_parcel always sets them.
+    rebuild_app_received_cases: int = 0
+    rebuild_zoning_cleared_cases: int = 0
+    rebuild_plans_received_cases: int = 0
+    rebuild_plans_approved_cases: int = 0
+    rebuild_permit_issued_cases: int = 0
+    rebuild_in_construction_cases: int = 0
+    rebuild_construction_completed_cases: int = 0
+    # Furthest milestone reached (highest stage with a case count > 0; 0 = none
+    # reached). Display-only — drives the map's stage color ramp. Not a count.
+    rebuild_stage: int = 0
 
 
 def analyze_parcel(joined: JoinedParcel) -> ParcelResult:
@@ -91,6 +112,7 @@ def analyze_parcel(joined: JoinedParcel) -> ParcelResult:
 
     pre = analyze_pre_fire(din)
     progress = _max_progress(fire_cases)
+    milestones = _rebuild_case_counts(fire_cases)
     primary = _select_primary_permit(fire_cases)
     post = _analyze_post_fire(primary)
     lfl_claimed, lfl_conflict = _resolve_lfl(fire_cases)
@@ -130,6 +152,14 @@ def analyze_parcel(joined: JoinedParcel) -> ParcelResult:
         roe_status=_to_str_or_none(din.get("ROE_Status")),
         debris_cleared=_to_str_or_none(din.get("Debris_Cleared")),
         dins_count=int(din.get("DINS_Count") or 0),
+        rebuild_app_received_cases=milestones["app_received"],
+        rebuild_zoning_cleared_cases=milestones["zoning_cleared"],
+        rebuild_plans_received_cases=milestones["plans_received"],
+        rebuild_plans_approved_cases=milestones["plans_approved"],
+        rebuild_permit_issued_cases=milestones["permit_issued"],
+        rebuild_in_construction_cases=milestones["in_construction"],
+        rebuild_construction_completed_cases=milestones["construction_completed"],
+        rebuild_stage=_furthest_stage(milestones),
     )
 
 
@@ -334,6 +364,34 @@ def _max_progress(cases: list[EpicCase]) -> int | None:
         if isinstance(n, (int, float)) and n is not None:
             nums.append(int(n))
     return max(nums) if nums else None
+
+
+def _rebuild_case_counts(cases: list[EpicCase]) -> dict[str, int]:
+    """Count, per independent milestone, how many cases have reached it.
+
+    A case has reached a milestone when its corresponding EPIC-LA field is
+    non-null (the field holds the milestone's label once reached). These are
+    independent flags — a case may carry a later milestone without an earlier
+    one — so each is counted on its own field, never inferred from another.
+    """
+    counts = {key: 0 for _, key, _ in REBUILD_STAGES}
+    for case in cases:
+        # The milestone fields are keyed dynamically; access via a plain dict
+        # view so mypy doesn't require string-literal TypedDict keys.
+        raw = cast("dict[str, Any]", case)
+        for _, key, field in REBUILD_STAGES:
+            if raw.get(field):
+                counts[key] += 1
+    return counts
+
+
+def _furthest_stage(milestone_counts: dict[str, int]) -> int:
+    """Highest stage number with at least one case reached; 0 if none."""
+    stage = 0
+    for num, key, _ in REBUILD_STAGES:
+        if milestone_counts[key] > 0:
+            stage = num
+    return stage
 
 
 def _select_primary_permit(cases: list[EpicCase]) -> EpicCase | None:

@@ -1,19 +1,26 @@
 import { readonly, ref } from "vue";
 
-// Module-scoped so the cards rail and the map share one selection. At most one
+// The metric selected on first load. Exactly one metric is always active (see
+// toggleMetric), so this is also the metric a user can never fully deselect.
+const DEFAULT_METRIC_ID = "rebuild_progress";
+
+// Module-scoped so the cards rail and the map share one selection. Exactly one
 // metric is active at a time; within it, at most one bucket.
-const activeMetricId = ref<string | null>(null);
+const activeMetricId = ref<string | null>(DEFAULT_METRIC_ID);
 const activeBucketKey = ref<string | null>(null);
 
-/** Toggle a metric on/off. Activating a metric clears any bucket selection. */
+/**
+ * Activate a metric. Exactly one metric is always selected, so tapping the
+ * already-active card's header does not deselect it — it just clears any
+ * bucket focus. Switching to a different metric clears the bucket too.
+ */
 function toggleMetric(id: string): void {
   if (activeMetricId.value === id) {
-    activeMetricId.value = null;
     activeBucketKey.value = null;
-  } else {
-    activeMetricId.value = id;
-    activeBucketKey.value = null;
+    return;
   }
+  activeMetricId.value = id;
+  activeBucketKey.value = null;
 }
 
 /**
@@ -29,17 +36,11 @@ function selectBucket(id: string, key: string): void {
   activeBucketKey.value = activeBucketKey.value === key ? null : key;
 }
 
-function clear(): void {
-  activeMetricId.value = null;
-  activeBucketKey.value = null;
-}
-
 export function useMapSelection() {
   return {
     activeMetricId: readonly(activeMetricId),
     activeBucketKey: readonly(activeBucketKey),
     toggleMetric,
     selectBucket,
-    clear,
   };
 }

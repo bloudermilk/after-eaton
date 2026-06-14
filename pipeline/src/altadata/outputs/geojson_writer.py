@@ -10,6 +10,7 @@ from typing import Any
 from ..processing.aggregate import adu_bucket, lfl_bucket, sfr_size_bucket
 from ..processing.geometry import representative_point
 from ..processing.join import JoinedParcel
+from ..processing.normalize import REBUILD_STAGES, BsdStatus
 from ..processing.parcel_analysis import ParcelResult
 from ..sources.schemas import DinsParcel
 
@@ -59,17 +60,31 @@ def write_parcels_compact_geojson(
 def _to_compact_feature(
     result: ParcelResult, point: tuple[float, float]
 ) -> dict[str, Any]:
+    properties: dict[str, Any] = {
+        "ain": result.ain,
+        "address": result.address,
+        "sfr_size_bucket": sfr_size_bucket(result),
+        "lfl_bucket": lfl_bucket(result),
+        "adu_bucket": adu_bucket(result),
+        "adds_sb9": result.adds_sb9,
+        "adds_sb1123": result.adds_sb1123,
+        # County "Damaged/Destroyed Parcels" scope: Red- or Yellow-tagged in the
+        # post-fire Safety Assessment. Lets the map filter to the funnel's
+        # "Damaged or destroyed" baseline (== summary.bsd_red_or_yellow_count).
+        "bsd_red_or_yellow": result.bsd_status in (BsdStatus.RED, BsdStatus.YELLOW),
+        # Furthest milestone reached, for the map's stage color ramp.
+        "rebuild_stage": result.rebuild_stage,
+    }
+    # One boolean per rebuild milestone, set when the parcel's furthest stage is
+    # at or beyond that milestone (monotonic — assumes earlier stages were
+    # passed). Lets the map filter to "reached stage N" and keeps the lit dots
+    # equal to the card's count for that row. Derived from REBUILD_STAGES so the
+    # props stay in lockstep with the pipeline.
+    for num, key, _ in REBUILD_STAGES:
+        properties[f"rebuild_{key}"] = result.rebuild_stage >= num
     return {
         "type": "Feature",
-        "properties": {
-            "ain": result.ain,
-            "address": result.address,
-            "sfr_size_bucket": sfr_size_bucket(result),
-            "lfl_bucket": lfl_bucket(result),
-            "adu_bucket": adu_bucket(result),
-            "adds_sb9": result.adds_sb9,
-            "adds_sb1123": result.adds_sb1123,
-        },
+        "properties": properties,
         "geometry": {"type": "Point", "coordinates": [point[0], point[1]]},
     }
 

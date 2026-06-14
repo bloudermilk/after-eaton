@@ -83,3 +83,21 @@ def rebuild_progress_label(num: int | None) -> str | None:
     if num is None:
         return None
     return REBUILD_PROGRESS_LABELS.get(num)
+
+
+# The seven INDEPENDENT rebuild-progress milestones, in lifecycle order. Each
+# tuple is (stage number, short key used by outputs/frontend, EPIC-LA field).
+# A case has "reached" a milestone when its field is non-null. The milestones
+# are not strictly nested (a case can hold a later one without an earlier one),
+# which is why a milestone count must be taken per field rather than derived
+# from the latest-stage `REBUILD_PROGRESS_NUM`. See METHODOLOGY.md → Rebuild
+# progress for why the latest-stage field is unsuitable for these counts.
+REBUILD_STAGES: tuple[tuple[int, str, str], ...] = (
+    (1, "app_received", "REBUILD_APP_RECEIVED"),
+    (2, "zoning_cleared", "ZONING_REV_CLEARED"),
+    (3, "plans_received", "BUILD_PLAN_REV_PROC"),
+    (4, "plans_approved", "BUILD_PLAN_APPROVED"),
+    (5, "permit_issued", "BUILD_PERMIT_ISSUED"),
+    (6, "in_construction", "REBUILD_IN_CONS"),
+    (7, "construction_completed", "CONS_COMPLETED"),
+)

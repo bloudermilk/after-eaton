@@ -41,13 +41,15 @@ def _result(
     added_adu_count: int = 0,
     adds_sb9: bool = False,
     adds_sb1123: bool = False,
+    rebuild_stage: int = 0,
+    bsd_status: BsdStatus = BsdStatus.RED,
 ) -> ParcelResult:
     return ParcelResult(
         ain=ain,
         apn=ain,
         address=address,
         damage=DamageLevel.DESTROYED,
-        bsd_status=BsdStatus.RED,
+        bsd_status=bsd_status,
         pre_sfr_count=1,
         pre_sfr_sqft=pre_sfr_sqft,
         pre_adu_count=0,
@@ -73,6 +75,7 @@ def _result(
         roe_status=None,
         debris_cleared=None,
         dins_count=1,
+        rebuild_stage=rebuild_stage,
     )
 
 
@@ -165,6 +168,15 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "adu_bucket",
         "adds_sb9",
         "adds_sb1123",
+        "bsd_red_or_yellow",
+        "rebuild_app_received",
+        "rebuild_zoning_cleared",
+        "rebuild_plans_received",
+        "rebuild_plans_approved",
+        "rebuild_permit_issued",
+        "rebuild_in_construction",
+        "rebuild_construction_completed",
+        "rebuild_stage",
     }
     assert feat["properties"] == {
         "ain": "p1",
@@ -174,7 +186,72 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "adu_bucket": "added_2",
         "adds_sb9": True,
         "adds_sb1123": False,
+        # _result defaults bsd_status to RED → in the damaged/destroyed scope.
+        "bsd_red_or_yellow": True,
+        # _result defaults rebuild_stage to 0, so no stage is reached.
+        "rebuild_app_received": False,
+        "rebuild_zoning_cleared": False,
+        "rebuild_plans_received": False,
+        "rebuild_plans_approved": False,
+        "rebuild_permit_issued": False,
+        "rebuild_in_construction": False,
+        "rebuild_construction_completed": False,
+        "rebuild_stage": 0,
     }
+
+
+def test_compact_geojson_stage_flags_are_cumulative(tmp_path: Path) -> None:
+    """A parcel at stage 5 is flagged for every stage up to 5 and none beyond,
+    so selecting any of those stages on the map lights this dot — matching the
+    monotonic card counts."""
+    pairs = [
+        (
+            _result("p1", rebuild_progress_num=5, rebuild_stage=5),
+            JoinedParcel(
+                din=_dins("p1", _square(2.5, 5.0)), cases=[_case("p1", -118.1, 34.2)]
+            ),
+        ),
+    ]
+    out = tmp_path / "parcels-compact.geojson"
+    write_parcels_compact_geojson(pairs, out, generated_at="2026-06-13T00:00:00+00:00")
+
+    props = json.loads(out.read_text())["features"][0]["properties"]
+    assert props["rebuild_stage"] == 5
+    assert props["rebuild_app_received"] is True
+    assert props["rebuild_zoning_cleared"] is True
+    assert props["rebuild_plans_received"] is True
+    assert props["rebuild_plans_approved"] is True
+    assert props["rebuild_permit_issued"] is True
+    assert props["rebuild_in_construction"] is False
+    assert props["rebuild_construction_completed"] is False
+
+
+def test_compact_geojson_bsd_red_or_yellow_flag(tmp_path: Path) -> None:
+    """The map's "Damaged or destroyed" baseline filters on `bsd_red_or_yellow`,
+    true only for the County's Red- (destroyed) and Yellow-tagged (damaged)
+    Safety Assessment scope — Green and untagged parcels are excluded."""
+    pairs = [
+        (
+            _result(ain, bsd_status=status),
+            JoinedParcel(
+                din=_dins(ain, _square(2.5, 5.0)), cases=[_case(ain, -118.1, 34.2)]
+            ),
+        )
+        for ain, status in [
+            ("red", BsdStatus.RED),
+            ("yellow", BsdStatus.YELLOW),
+            ("green", BsdStatus.GREEN),
+            ("none", BsdStatus.NONE),
+        ]
+    ]
+    out = tmp_path / "parcels-compact.geojson"
+    write_parcels_compact_geojson(pairs, out, generated_at="2026-06-13T00:00:00+00:00")
+
+    flags = {
+        f["properties"]["ain"]: f["properties"]["bsd_red_or_yellow"]
+        for f in json.loads(out.read_text())["features"]
+    }
+    assert flags == {"red": True, "yellow": True, "green": False, "none": False}
 
 
 def test_compact_geojson_drops_pointless_parcels(tmp_path: Path) -> None:

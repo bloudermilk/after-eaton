@@ -11,11 +11,17 @@ export interface Summary {
   bsd_yellow_count: number;
   bsd_green_count: number;
   bsd_red_or_yellow_count: number;
-  no_permit_count: number;
-  permit_in_review_count: number;
-  permit_issued_count: number;
-  construction_count: number;
-  completed_count: number;
+  // Rebuild-progress funnel: parcels at or beyond each milestone. Monotonic —
+  // a parcel is counted at every stage up to the furthest it reached, so the
+  // counts strictly decline (unlike LA County's non-monotonic case-level
+  // dashboard). See metrics.ts (rebuild_progress).
+  rebuild_app_received_parcels: number;
+  rebuild_zoning_cleared_parcels: number;
+  rebuild_plans_received_parcels: number;
+  rebuild_plans_approved_parcels: number;
+  rebuild_permit_issued_parcels: number;
+  rebuild_in_construction_parcels: number;
+  rebuild_construction_completed_parcels: number;
   lfl_count: number;
   nlfl_count: number;
   lfl_unknown_count: number;
@@ -44,6 +50,21 @@ export interface ParcelProperties {
   adu_bucket: string;
   adds_sb9: boolean;
   adds_sb1123: boolean;
+  // County "Damaged/Destroyed Parcels" scope: Red- or Yellow-tagged in the
+  // post-fire Safety Assessment. Drives the funnel's "Damaged or destroyed"
+  // baseline filter (== summary.bsd_red_or_yellow_count).
+  bsd_red_or_yellow: boolean;
+  // Rebuild-progress: a boolean per milestone, true when the parcel reached
+  // that stage or beyond (for "at or past stage N" map filtering), plus
+  // `rebuild_stage` (furthest milestone reached, 0–7) for the stage color ramp.
+  rebuild_app_received: boolean;
+  rebuild_zoning_cleared: boolean;
+  rebuild_plans_received: boolean;
+  rebuild_plans_approved: boolean;
+  rebuild_permit_issued: boolean;
+  rebuild_in_construction: boolean;
+  rebuild_construction_completed: boolean;
+  rebuild_stage: number;
 }
 
 export interface ParcelFeature {

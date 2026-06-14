@@ -21,6 +21,7 @@ def _make(
     adds_sb1123: bool = False,
     sb_pathway_conflict: bool = False,
     added_adu_count: int = 0,
+    rebuild_stage: int = 0,
 ) -> ParcelResult:
     return ParcelResult(
         ain=ain,
@@ -53,6 +54,7 @@ def _make(
         roe_status=None,
         debris_cleared=None,
         dins_count=1,
+        rebuild_stage=rebuild_stage,
     )
 
 
@@ -105,9 +107,6 @@ def test_basic_counts() -> None:
     assert s.bsd_yellow_count == 2
     assert s.bsd_green_count == 1
     assert s.bsd_red_or_yellow_count == 3
-    assert s.no_permit_count == 2
-    assert s.permit_in_review_count == 1
-    assert s.completed_count == 1
     assert s.lfl_count == 1
     assert s.lfl_unknown_count == 1  # only parcel 2 (has permit, no LFL signal)
     assert s.sfr_size_pct_smaller_over_30 == 0
@@ -153,6 +152,35 @@ def test_sfr_size_buckets_boundary() -> None:
     assert s.sfr_size_pct_larger_10_to_30 == 2
     assert s.sfr_size_pct_larger_over_30 == 1
     assert s.sfr_size_pct_unknown == 1
+
+
+def test_rebuild_funnel_counts_are_monotonic() -> None:
+    """The published funnel is cumulative on the furthest stage reached: a parcel
+    at stage N is counted at every stage 1..N, so the counts strictly decline.
+
+    (The non-monotonic, case-level view is preserved in the per-parcel
+    `rebuild_*_cases` fields and exercised in test_parcel_analysis, not here.)
+    """
+    parcels = [
+        _make(ain="A", rebuild_stage=7),  # completed → counts at all 7 stages
+        _make(ain="B", rebuild_stage=5),  # permit issued → stages 1..5
+        _make(ain="C", rebuild_stage=2),  # zoning cleared → stages 1..2
+        _make(ain="D", rebuild_stage=0),  # no milestone → counted nowhere
+    ]
+    s = aggregate_burn_area(parcels, "2026-04-27T00:00:00Z")
+
+    counts = [
+        s.rebuild_app_received_parcels,
+        s.rebuild_zoning_cleared_parcels,
+        s.rebuild_plans_received_parcels,
+        s.rebuild_plans_approved_parcels,
+        s.rebuild_permit_issued_parcels,
+        s.rebuild_in_construction_parcels,
+        s.rebuild_construction_completed_parcels,
+    ]
+    assert counts == [3, 3, 2, 2, 2, 1, 1]
+    # Strictly non-increasing across the funnel, by construction.
+    assert all(counts[i] >= counts[i + 1] for i in range(len(counts) - 1))
 
 
 def test_adu_distribution_buckets() -> None:

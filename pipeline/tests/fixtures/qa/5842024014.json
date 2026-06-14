@@ -285,6 +285,17 @@
     "added_adu_count": 0,
     "rebuild_progress_num": 7,
     "lfl_claimed": true,
-    "sfr_size_comparison": "larger"
+    "sfr_size_comparison": "larger",
+    "_milestone_note": "Non-nested: the permit case reached completed but not in-construction, while the plan case carries the early app/zoning milestones.",
+    "rebuild_milestone_cases": {
+      "app_received": 1,
+      "zoning_cleared": 1,
+      "plans_received": 1,
+      "plans_approved": 1,
+      "permit_issued": 1,
+      "in_construction": 0,
+      "construction_completed": 1
+    },
+    "rebuild_stage": 7
   }
 }
