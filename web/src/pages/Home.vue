@@ -202,7 +202,7 @@ const dataAsOfLabel = computed(() => {
 
       <div class="home__meta">
         <p class="home__about">
-          <strong>After Eaton</strong> is free and open source. Built by Altadenans, for Altadena.
+          <strong>Altadata</strong> is free and open source. Built by Altadenans, for Altadena.
           <a :href="REPO_URL" target="_blank" rel="noopener">View source on GitHub</a>.
         </p>
         <nav class="home__links" aria-label="Site">

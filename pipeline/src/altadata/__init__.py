@@ -1,0 +1,1 @@
+"""Altadata data pipeline."""

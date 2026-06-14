@@ -1,6 +1,6 @@
 # Methodology
 
-This document describes — end-to-end and at the attribute level — how the After Eaton pipeline turns LA County's open data into the fields you see in our outputs. It is intended for two audiences:
+This document describes — end-to-end and at the attribute level — how the Altadata pipeline turns LA County's open data into the fields you see in our outputs. It is intended for two audiences:
 
 1. **End users** who want to understand what a number on the site means.
 2. **Auditors and journalists** who want to reproduce or critique a specific result.
@@ -109,7 +109,7 @@ The FIRESCOPE classification, used by California fire agencies for post-incident
 | `no_damage` | `No Damage` | <1% damage. |
 | `no_data` | `No Data/Vacant` (or null) | No tag recorded. |
 
-Source: `pipeline/src/after_eaton/processing/normalize.py:RAW_TO_DAMAGE`.
+Source: `pipeline/src/altadata/processing/normalize.py:RAW_TO_DAMAGE`.
 
 ### `bsd_status` — DINS `BSD_Tag` (Safety Assessment)
 
@@ -165,7 +165,7 @@ Per parcel we emit:
 
 Sqft fields are `null` (rather than 0) when the corresponding count is 0, so consumers can distinguish "no SFR on this parcel" from "an SFR with unknown sqft".
 
-Source: `pipeline/src/after_eaton/processing/parcel_analysis.py:_analyze_pre_fire`.
+Source: `pipeline/src/altadata/processing/parcel_analysis.py:_analyze_pre_fire`.
 
 > **Note on LA County's broader definition.** The County's official metric definitions PDF treats SFR as "2 units or less (duplex, apartment, condo, etc.)" and MFR as "3 or more units". Our parser currently classifies any DUPLEX as MFR, which is stricter than the County's definition. This is a known divergence; reconciling it would require revising both the regex and the DINS-slot logic.
 
@@ -189,7 +189,7 @@ A record qualifies when:
 
 Temporary Housing Project records (RVs / trailers) are excluded — they aren't part of the planned final state.
 
-The LLM follows explicit dedup rules (`pipeline/src/after_eaton/processing/llm_prompts.py:SYSTEM_PROMPT`):
+The LLM follows explicit dedup rules (`pipeline/src/altadata/processing/llm_prompts.py:SYSTEM_PROMPT`):
 
 1. Numbered list items in one description (`1.`, `2.`, …) → distinct structures.
 2. Explicit `REVISION TO`, `REPLACES`, `SUPERSEDES`, `VOIDS` language → same structure (most recent wins).
@@ -270,7 +270,7 @@ We pick the earliest match in the highest-priority tier with any match. The SB-9
 
 Within tier 1, we use earliest position. So `"REBUILD-ADU- 1-STORY 800 SF SFD"` classifies as `adu` (ADU appears before SFD), correctly recognizing that the SFD is descriptor for the ADU.
 
-Source: `pipeline/src/after_eaton/processing/description_parser.py:_T1_PRIMARY`, `_parse_segment`.
+Source: `pipeline/src/altadata/processing/description_parser.py:_T1_PRIMARY`, `_parse_segment`.
 
 ### Step 3 — Per-segment square-foot extraction
 
@@ -281,7 +281,7 @@ After classification, we extract the segment's primary sqft by finding the numer
 
 The leading `\b` anchor before the digit prevents matching the trailing `9` in tokens like `SB9 SFR` as `9` sqft. There is deliberately no trailing constraint — `"1,705 SFR"` (unit running into the next word) and `"1412 SF\n"` (unit at end of line) both match.
 
-Source: `pipeline/src/after_eaton/processing/description_parser.py:_SQFT_RE`, `_pick_sqft_near`.
+Source: `pipeline/src/altadata/processing/description_parser.py:_SQFT_RE`, `_pick_sqft_near`.
 
 ### Step 4 — Per-parcel aggregation
 
@@ -330,7 +330,7 @@ A parcel's cases sometimes give *different* non-null signals. When that happens,
 
 In our most recent run, 85 parcels had conflicts. Causes include applicant typos in the permit description (we've seen `"Eaton Non-Fire Like-for-Like Rebuild"` where the intent was clearly Non-LFL), as well as legitimate intent shifts between an early plan filing and a later permit filing.
 
-Source: `pipeline/src/after_eaton/processing/parcel_analysis.py:_resolve_lfl`.
+Source: `pipeline/src/altadata/processing/parcel_analysis.py:_resolve_lfl`.
 
 ---
 
@@ -381,7 +381,7 @@ A failure of either invariant aborts the run with exit code 3 and **no release i
 
 **Per-feature contract:** each tract/block-group `Feature` carries identifier fields (`ct20` + `label` for tracts; `bg20` + `ct20` + `label` for block groups) plus every numeric count from `summary.json` — `total_parcels`, `damaged_parcels`, `destroyed_parcels`, the `bsd_*_count` set, the rebuild-progress set, the LFL set, the SFR-size set, `sb9_count`, and `added_adu_count`. A tract/block-group that intersects the perimeter envelope but contains zero Altadena parcels still ships as a feature with all counts = 0, so the geographic frame is stable regardless of source drift.
 
-Source: `pipeline/src/after_eaton/processing/spatial_aggregate.py:aggregate_by_region`.
+Source: `pipeline/src/altadata/processing/spatial_aggregate.py:aggregate_by_region`.
 
 ---
 
@@ -391,7 +391,7 @@ Every run produces a `qc-report.json` documenting both gate-level pass/fail and 
 
 ### Aggregate thresholds (gate the run)
 
-If any threshold fails, the run aborts with exit code 3 and **no release is published**. The thresholds are constants at the top of `pipeline/src/after_eaton/qc/aggregate.py`.
+If any threshold fails, the run aborts with exit code 3 and **no release is published**. The thresholds are constants at the top of `pipeline/src/altadata/qc/aggregate.py`.
 
 | Threshold | Default | Definition |
 |---|---|---|

@@ -1,6 +1,6 @@
 // Shapes mirror the Python pipeline outputs:
-// - SummaryResult & RegionCounts: pipeline/src/after_eaton/processing/aggregate.py
-// - QcReport, RecordWarning, ThresholdCheck: pipeline/src/after_eaton/qc/{report,aggregate,per_record}.py
+// - SummaryResult & RegionCounts: pipeline/src/altadata/processing/aggregate.py
+// - QcReport, RecordWarning, ThresholdCheck: pipeline/src/altadata/qc/{report,aggregate,per_record}.py
 
 export interface Summary {
   generated_at: string;

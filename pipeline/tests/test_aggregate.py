@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from after_eaton.processing.aggregate import aggregate_burn_area
-from after_eaton.processing.normalize import BsdStatus, DamageLevel
-from after_eaton.processing.parcel_analysis import ParcelResult
+from altadata.processing.aggregate import aggregate_burn_area
+from altadata.processing.normalize import BsdStatus, DamageLevel
+from altadata.processing.parcel_analysis import ParcelResult
 
 
 def _make(

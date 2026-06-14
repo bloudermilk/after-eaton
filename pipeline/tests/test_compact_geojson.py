@@ -7,13 +7,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from after_eaton.outputs.geojson_writer import write_parcels_compact_geojson
-from after_eaton.processing.aggregate import adu_bucket, lfl_bucket, sfr_size_bucket
-from after_eaton.processing.geometry import representative_point
-from after_eaton.processing.join import JoinedParcel
-from after_eaton.processing.normalize import BsdStatus, DamageLevel
-from after_eaton.processing.parcel_analysis import ParcelResult
-from after_eaton.sources.schemas import DinsParcel, EpicCase
+from altadata.outputs.geojson_writer import write_parcels_compact_geojson
+from altadata.processing.aggregate import adu_bucket, lfl_bucket, sfr_size_bucket
+from altadata.processing.geometry import representative_point
+from altadata.processing.join import JoinedParcel
+from altadata.processing.normalize import BsdStatus, DamageLevel
+from altadata.processing.parcel_analysis import ParcelResult
+from altadata.sources.schemas import DinsParcel, EpicCase
 
 
 def _square(cx: float, cy: float, half: float = 0.5) -> dict[str, Any]:

@@ -1,8 +1,8 @@
 <template>
   <header class="site-header">
     <div class="site-header__inner">
-      <RouterLink to="/" class="site-header__brand" aria-label="After Eaton — home">
-        <span class="site-header__name">After Eaton</span>
+      <RouterLink to="/" class="site-header__brand" aria-label="Altadata — home">
+        <span class="site-header__name">Altadata</span>
       </RouterLink>
     </div>
   </header>

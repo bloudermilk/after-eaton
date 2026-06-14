@@ -51,7 +51,7 @@ from .sources.dins import fetch_dins_parcels
 from .sources.epicla import fetch_epicla_cases
 from .sources.fire_perimeter import fetch_fire_perimeter
 
-logger = logging.getLogger("after_eaton")
+logger = logging.getLogger("altadata")
 
 
 @click.command()

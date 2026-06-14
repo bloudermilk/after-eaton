@@ -6,11 +6,11 @@ import json
 from pathlib import Path
 from typing import cast
 
-from after_eaton.cli import _analyze_all
-from after_eaton.processing.join import JoinedParcel
-from after_eaton.processing.llm_extraction import ExtractionCache, load_cache
-from after_eaton.processing.llm_provider import LLMResponse, OpenRouterProvider
-from after_eaton.sources.schemas import DinsParcel, EpicCase
+from altadata.cli import _analyze_all
+from altadata.processing.join import JoinedParcel
+from altadata.processing.llm_extraction import ExtractionCache, load_cache
+from altadata.processing.llm_provider import LLMResponse, OpenRouterProvider
+from altadata.sources.schemas import DinsParcel, EpicCase
 
 
 def _din(ain: str = "1234567890") -> DinsParcel:

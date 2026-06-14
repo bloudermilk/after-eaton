@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from after_eaton.processing.llm_prompts import (
+from altadata.processing.llm_prompts import (
     PROMPT_VERSION,
     ParcelContext,
     parcel_cache_key,
     render_user_prompt,
 )
-from after_eaton.sources.schemas import EpicCase
+from altadata.sources.schemas import EpicCase
 
 
 def _record(**overrides: object) -> EpicCase:

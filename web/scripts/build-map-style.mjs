@@ -90,7 +90,7 @@ const positron = await res.json();
 
 const style = {
   version: positron.version,
-  name: "After Eaton — warm positron",
+  name: "Altadata — warm positron",
   // Keep OpenFreeMap's free hosted tiles, sprites, and glyphs verbatim.
   sources: positron.sources,
   sprite: positron.sprite,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from after_eaton.processing.description_parser import (
+from altadata.processing.description_parser import (
     extract_lfl_claim,
     mentions_sb9,
     parse_description,

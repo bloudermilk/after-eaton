@@ -1,6 +1,6 @@
-# After Eaton
+# Altadata
 
-**After Eaton** is a living analysis of the impacts of the Eaton Fire of 2025 on the unincorporated town of Altadena. We use open data from LA County and other sources to compare rebuild efforts to the pre-fire state of the community. Our site is free and publicly accessible, and intended to be useful for community members, county agencies, and other stakeholders.
+**Altadata** is a living analysis of the impacts of the Eaton Fire of 2025 on the unincorporated town of Altadena. We use open data from LA County and other sources to compare rebuild efforts to the pre-fire state of the community. Our site is free and publicly accessible, and intended to be useful for community members, county agencies, and other stakeholders.
 
 ## Data sources
 
@@ -54,7 +54,7 @@ For the full attribute-level definition of every output field, including the reg
 
 ## Architecture
 
-The pipeline is a Python package (`after_eaton`) with one CLI entrypoint. The frontend is a Vue 3 + Vite SPA deployed to GitHub Pages; it bundles the data assets at build time and serves everything same-origin. There is no backend, no database, no user state.
+The pipeline is a Python package (`altadata`) with one CLI entrypoint. The frontend is a Vue 3 + Vite SPA deployed to GitHub Pages; it bundles the data assets at build time and serves everything same-origin. There is no backend, no database, no user state.
 
 For internal architecture, module layout, retry/QC logic, and operational notes, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
@@ -73,7 +73,7 @@ uv pip install -e ".[dev]"
 **Run a fresh end-to-end pull against live ArcGIS:**
 
 ```bash
-.venv/bin/after-eaton --out-dir ../data
+.venv/bin/altadata --out-dir ../data
 ```
 
 Outputs land flat in `data/` (gitignored). The run takes ~30 seconds; expect ~50 MB of output, mostly the raw source snapshots.

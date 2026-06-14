@@ -42,7 +42,7 @@ jobs:
         working-directory: pipeline
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: after-eaton --out-dir ../data --log-level INFO
+        run: altadata --out-dir ../data --log-level INFO
 
       - name: Persist LLM cache (always, even on pipeline failure)
         if: always() && hashFiles('data/llm-extraction-cache.json') != ''

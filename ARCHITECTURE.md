@@ -58,7 +58,7 @@ The site is fully static. There is no backend, no database, and no user state. T
 │       └── deploy.yml            # frontend build + Pages deploy
 ├── pipeline/                     # Python data processing
 │   ├── pyproject.toml
-│   ├── src/after_eaton/
+│   ├── src/altadata/
 │   │   ├── cli.py                # click entrypoint, wires the run
 │   │   ├── sources/              # ArcGIS fetchers + typed schemas
 │   │   ├── processing/           # join, normalize, parse, analyze, aggregate
@@ -80,7 +80,7 @@ The pipeline and frontend are decoupled. The pipeline writes to `data/` locally 
 
 ## Data pipeline
 
-The pipeline is a single Python package, `after_eaton`, exposing one CLI entrypoint (`after-eaton`). A run executes this pipeline in order; if any step fails, no release is published.
+The pipeline is a single Python package, `altadata`, exposing one CLI entrypoint (`altadata`). A run executes this pipeline in order; if any step fails, no release is published.
 
 ```
 fetch DINS                    → sources/dins.py
@@ -339,12 +339,12 @@ uv venv --python 3.11
 uv pip install -e ".[dev]"
 ```
 
-This installs the `after-eaton` console script into the venv.
+This installs the `altadata` console script into the venv.
 
 **Run end-to-end against live ArcGIS data:**
 
 ```bash
-.venv/bin/after-eaton --out-dir ../data
+.venv/bin/altadata --out-dir ../data
 ```
 
 Flags:
@@ -369,7 +369,7 @@ Exit codes:
 .venv/bin/pytest tests/test_foo.py     # one file
 ```
 
-**Tuning thresholds:** edit the constants at the top of `pipeline/src/after_eaton/qc/aggregate.py` (`DESCRIPTION_PARSE_MIN_RATE`, etc.). The names are stable for ops review.
+**Tuning thresholds:** edit the constants at the top of `pipeline/src/altadata/qc/aggregate.py` (`DESCRIPTION_PARSE_MIN_RATE`, etc.). The names are stable for ops review.
 
 ### Frontend
 
@@ -421,7 +421,7 @@ tests/
 
 1. **Unit tests** (`test_description_parser.py`, `test_aggregate.py`, `test_lfl_resolution.py`) — fast, in-memory, no fixtures. Cover parser regex edge cases, aggregate counting, and LFL precedence rules.
 2. **QA regression tests** (`test_parcel_analysis.py`) — load every JSON file under `tests/fixtures/qa/` and assert `analyze_parcel()` produces the values listed under `expected`. Each fixture file becomes one parametrized test case automatically — adding a new validated parcel requires only dropping a JSON file, no code change.
-3. **End-to-end smoke** — running `after-eaton` against live ArcGIS produces the canonical outputs. Not yet automated in CI; today it's an interactive check before merge.
+3. **End-to-end smoke** — running `altadata` against live ArcGIS produces the canonical outputs. Not yet automated in CI; today it's an interactive check before merge.
 
 **QA fixture format:**
 
