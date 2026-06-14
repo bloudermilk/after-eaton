@@ -32,6 +32,30 @@ export interface Summary {
   dwelling_rebuild_count: number;
 }
 
+// Shape of parcels-compact.geojson — one Point per parcel carrying only the
+// properties the map reads. Bucket-key strings mirror the pipeline classifiers
+// in processing/aggregate.py (and are described by METRICS in metrics.ts).
+export interface ParcelProperties {
+  ain: string;
+  address: string;
+  sfr_size_bucket: string;
+  lfl_bucket: string;
+  adu_bucket: string;
+  adds_sb9: boolean;
+}
+
+export interface ParcelFeature {
+  type: "Feature";
+  geometry: { type: "Point"; coordinates: [number, number] };
+  properties: ParcelProperties;
+}
+
+export interface ParcelFeatureCollection {
+  type: "FeatureCollection";
+  metadata?: { generated_at: string };
+  features: ParcelFeature[];
+}
+
 export type WarningSeverity = "data" | "info";
 
 export interface RecordWarning {

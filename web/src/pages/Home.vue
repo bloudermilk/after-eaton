@@ -4,100 +4,91 @@ import { computed } from "vue";
 import StatCard from "@/components/StatCard.vue";
 import InfoButton from "@/components/InfoButton.vue";
 import BigNumber from "@/components/charts/BigNumber.vue";
-import DistributionBars from "@/components/charts/DistributionBars.vue";
-import DonutChart from "@/components/charts/DonutChart.vue";
+import MetricList from "@/components/charts/MetricList.vue";
 import VerticalBars from "@/components/charts/VerticalBars.vue";
+import ParcelMap from "@/components/map/ParcelMap.vue";
 import { useDataset } from "@/composables/useDataset";
+import { useMapSelection } from "@/composables/useMapSelection";
+import { useParcels } from "@/composables/useParcels";
+import { DATA_PATHS, REPO_URL } from "@/constants";
+import { getMetric } from "@/metrics";
 
-const { summary } = useDataset();
+const { summary, generatedAt } = useDataset();
+const { parcels } = useParcels();
+const { activeMetricId, activeBucketKey, toggleMetric, selectBucket } = useMapSelection();
 
-const sfrBuckets = computed(() => {
+// Build a metric's display buckets from summary.json counts, dropping empty
+// ones (a 0-count bucket has nothing to select on the map). Colors + keys come
+// from the shared metric definition, so the cards and map never diverge.
+function bucketsFor(metricId: string) {
   const s = summary.value;
-  if (!s) return [];
-  return [
-    {
-      label: ">30% smaller",
-      value: s.sfr_size_pct_smaller_over_30,
-      color: "var(--color-deodara)",
-    },
-    {
-      label: "10–30% smaller",
-      value: s.sfr_size_pct_smaller_10_to_30,
-      color: "var(--color-deodara-soft)",
-    },
-    {
-      label: "±10%",
-      value: s.sfr_size_pct_within_10,
-      color: "var(--color-alluvial)",
-    },
-    {
-      label: "10–30% larger",
-      value: s.sfr_size_pct_larger_10_to_30,
-      color: "var(--color-poppy-soft)",
-    },
-    {
-      label: ">30% larger",
-      value: s.sfr_size_pct_larger_over_30,
-      color: "var(--color-poppy)",
-    },
-  ];
-});
+  const metric = getMetric(metricId);
+  if (!s || !metric) return [];
+  return metric.buckets
+    .map((b) => ({ key: b.key, label: b.label, value: s[b.summaryKey], color: b.color }))
+    .filter((b) => b.value > 0);
+}
 
-const lflSlices = computed(() => {
-  const s = summary.value;
-  if (!s) return [];
-  return [
-    { label: "Like-for-like", value: s.lfl_count, color: "var(--color-deodara)" },
-    {
-      label: "Not like-for-like",
-      value: s.nlfl_count,
-      color: "var(--color-poppy)",
-    },
-    {
-      label: "Not specified",
-      value: s.lfl_unknown_count,
-      color: "var(--color-poppy-soft)",
-    },
-  ];
-});
-
-const aduBuckets = computed(() => {
-  const s = summary.value;
-  if (!s) return [];
-  const out = [
-    {
-      label: "+1 ADU",
-      value: s.adu_added_1_count,
-      color: "var(--color-deodara)",
-    },
-    {
-      label: "+2 ADUs",
-      value: s.adu_added_2_count,
-      color: "var(--color-lupin)",
-    },
-  ];
-  if (s.adu_added_3_plus_count > 0) {
-    out.push({
-      label: "+3 or more",
-      value: s.adu_added_3_plus_count,
-      color: "var(--color-poppy)",
-    });
-  }
-  return out;
-});
+const sfrBuckets = computed(() => bucketsFor("sfr_size"));
+const lflItems = computed(() => bucketsFor("lfl"));
+const aduItems = computed(() => bucketsFor("adu"));
 
 const dwellingDenominator = computed(() => summary.value?.dwelling_rebuild_count ?? 0);
+// Like-for-like percentages are of all permitted parcels (the bucket total).
+const lflDenominator = computed(() => lflItems.value.reduce((sum, b) => sum + b.value, 0));
+
+// The selected bucket for a card is only meaningful while that card's metric
+// is the active one.
+function selectedFor(metricId: string): string | null {
+  return activeMetricId.value === metricId ? activeBucketKey.value : null;
+}
+
+// Any tap on a card brings it fully into view (centered, matching the mobile
+// snap). This runs alongside — not instead of — the header-toggle / bucket
+// selection, and is effectively a no-op on desktop where cards are already
+// fully visible in the vertical rail.
+function centerCardOnTap(event: MouseEvent): void {
+  (event.currentTarget as HTMLElement).scrollIntoView({
+    behavior: "smooth",
+    inline: "center",
+    block: "nearest",
+  });
+}
+
+const dataAsOfLabel = computed(() => {
+  if (!generatedAt.value) return null;
+  return generatedAt.value.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "America/Los_Angeles",
+    timeZoneName: "short",
+  });
+});
 </script>
 
 <template>
-  <main>
-    <section class="hero">
-      <h1>Rebuilding Altadena</h1>
-      <p>A living analysis of how Altadena is rebuilding after the Eaton Fire of 2025.</p>
-    </section>
+  <main v-if="summary" class="home">
+    <div class="home__rail">
+      <div class="home__intro">
+        <h1>Rebuilding Altadena</h1>
+        <p>
+          A living analysis of how Altadena is rebuilding after the Eaton Fire of 2025. Tap a metric
+          to map it; tap a bucket to isolate it.
+        </p>
+        <p v-if="dataAsOfLabel" class="home__pill">Data as of {{ dataAsOfLabel }}</p>
+      </div>
 
-    <section v-if="summary" class="grid">
-      <StatCard title="Relative size" subtitle="Post-fire SFR vs. pre-fire SFR">
+      <StatCard
+        title="Relative size"
+        subtitle="Post-fire SFR vs. pre-fire SFR"
+        interactive
+        :active="activeMetricId === 'sfr_size'"
+        class="home__card"
+        @click="centerCardOnTap"
+        @toggle="toggleMetric('sfr_size')"
+      >
         <template #info>
           <InfoButton title="Relative size">
             <p>
@@ -112,10 +103,23 @@ const dwellingDenominator = computed(() => summary.value?.dwelling_rebuild_count
             </p>
           </InfoButton>
         </template>
-        <VerticalBars :buckets="sfrBuckets" :denominator="dwellingDenominator" />
+        <VerticalBars
+          :buckets="sfrBuckets"
+          :denominator="dwellingDenominator"
+          :selected-bucket="selectedFor('sfr_size')"
+          @select="(key) => selectBucket('sfr_size', key)"
+        />
       </StatCard>
 
-      <StatCard title="Like-for-like" subtitle="Rebuild project type">
+      <StatCard
+        title="Like-for-like"
+        subtitle="Rebuild project type"
+        interactive
+        :active="activeMetricId === 'lfl'"
+        class="home__card"
+        @click="centerCardOnTap"
+        @toggle="toggleMetric('lfl')"
+      >
         <template #info>
           <InfoButton title="Like-for-Like">
             <p>
@@ -130,10 +134,23 @@ const dwellingDenominator = computed(() => summary.value?.dwelling_rebuild_count
             </p>
           </InfoButton>
         </template>
-        <DonutChart :slices="lflSlices" />
+        <MetricList
+          :items="lflItems"
+          :denominator="lflDenominator"
+          :selected-bucket="selectedFor('lfl')"
+          @select="(key) => selectBucket('lfl', key)"
+        />
       </StatCard>
 
-      <StatCard title="Accessory dwellings" subtitle="ADUs added relative to pre-fire">
+      <StatCard
+        title="Accessory dwellings"
+        subtitle="ADUs added relative to pre-fire"
+        interactive
+        :active="activeMetricId === 'adu'"
+        class="home__card"
+        @click="centerCardOnTap"
+        @toggle="toggleMetric('adu')"
+      >
         <template #info>
           <InfoButton title="Accessory dwellings">
             <p>
@@ -148,10 +165,23 @@ const dwellingDenominator = computed(() => summary.value?.dwelling_rebuild_count
             </p>
           </InfoButton>
         </template>
-        <DistributionBars :buckets="aduBuckets" :denominator="dwellingDenominator" />
+        <MetricList
+          :items="aduItems"
+          :denominator="dwellingDenominator"
+          :selected-bucket="selectedFor('adu')"
+          @select="(key) => selectBucket('adu', key)"
+        />
       </StatCard>
 
-      <StatCard title="SB-9 permits" subtitle="Parcels with SB-9 permits filed">
+      <StatCard
+        title="SB-9 permits"
+        subtitle="Parcels with SB-9 permits filed"
+        interactive
+        :active="activeMetricId === 'sb9'"
+        class="home__card"
+        @click="centerCardOnTap"
+        @toggle="toggleMetric('sb9')"
+      >
         <template #info>
           <InfoButton title="SB-9 permits">
             <p>
@@ -161,36 +191,160 @@ const dwellingDenominator = computed(() => summary.value?.dwelling_rebuild_count
             </p>
           </InfoButton>
         </template>
-        <BigNumber :value="summary.sb9_count" label="Parcels" />
+        <BigNumber
+          :value="summary.sb9_count"
+          label="Parcels"
+          bucket-key="true"
+          :selected-bucket="selectedFor('sb9')"
+          @select="(key) => selectBucket('sb9', key)"
+        />
       </StatCard>
-    </section>
+
+      <div class="home__meta">
+        <p class="home__about">
+          <strong>After Eaton</strong> is free and open source. Built by Altadenans, for Altadena.
+          <a :href="REPO_URL" target="_blank" rel="noopener">View source on GitHub</a>.
+        </p>
+        <nav class="home__links" aria-label="Site">
+          <RouterLink to="/methodology">Methodology</RouterLink>
+          <RouterLink to="/quality-control">Quality Control</RouterLink>
+          <a :href="DATA_PATHS.parcelsCsv" download>Download parcels.csv</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="home__map">
+      <ParcelMap
+        :geojson="parcels"
+        :active-metric-id="activeMetricId"
+        :active-bucket="activeBucketKey"
+      />
+    </div>
   </main>
 </template>
 
 <style scoped>
-.hero {
-  padding: var(--space-5) 0 var(--space-7);
-  max-width: 720px;
+/* Full-viewport split that overrides the global centered `main`. */
+.home {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
-.hero h1 {
-  font-size: var(--fs-2xl);
+
+/* --- The cards rail ------------------------------------------------------ */
+/* Narrow / portrait: a horizontal scroller of cards, ~31% of the viewport. */
+.home__rail {
+  flex: 0 0 31vh;
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--color-paper-deep);
+  /* Rail sits at the bottom on mobile, so the divider is on its top edge. */
+  border-top: 1px solid var(--color-rule);
+  scroll-snap-type: x mandatory;
+}
+
+.home__rail :deep(.stat-card) {
+  flex: 0 0 84%;
+  /* Center each card so middle cards show an equal peek of their neighbors. */
+  scroll-snap-align: center;
+}
+
+/* Intro + meta only show in the wide vertical rail; the narrow row is cards. */
+.home__intro,
+.home__meta {
+  display: none;
+}
+
+.home__map {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  /* Mobile: map on top, cards rail below it. */
+  order: -1;
+}
+
+/* --- Wide / landscape: vertical column on the left, map on the right ----- */
+@media (min-width: 768px) {
+  .home {
+    flex-direction: row;
+  }
+
+  .home__rail {
+    flex: 0 0 360px;
+    flex-direction: column;
+    max-width: 40%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-top: none;
+    border-right: 1px solid var(--color-rule);
+    scroll-snap-type: none;
+  }
+
+  /* Restore natural order: rail on the left, map on the right. */
+  .home__map {
+    order: 0;
+  }
+
+  .home__rail :deep(.stat-card) {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  .home__intro,
+  .home__meta {
+    display: block;
+  }
+
+  .home__intro h1 {
+    font-size: var(--fs-xl);
+    margin-bottom: var(--space-2);
+  }
+  .home__intro p {
+    color: var(--color-ink-muted);
+    font-size: var(--fs-sm);
+    margin: var(--space-2) 0;
+  }
+}
+
+/* "Data as of" pill, now sitting just under the intro heading. */
+.home__pill {
+  display: inline-block;
+  background: var(--color-paper);
+  border: 1px solid var(--color-rule);
+  padding: var(--space-2) var(--space-3);
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  margin: var(--space-3) 0 0;
+}
+
+/* --- Rail meta (folded-in footer) --------------------------------------- */
+.home__meta {
+  margin-top: auto;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-rule);
+}
+
+.home__about {
+  color: var(--color-ink-muted);
+  font-size: var(--fs-sm);
   margin: 0 0 var(--space-3);
 }
-.hero p {
-  color: var(--color-ink-muted);
-  font-size: var(--fs-md);
-  margin: 0;
+.home__about strong {
+  color: var(--color-ink);
 }
 
-.grid {
-  display: grid;
-  gap: var(--space-5);
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-}
-
-@media (min-width: 1000px) {
-  .grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+.home__links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
 }
 </style>

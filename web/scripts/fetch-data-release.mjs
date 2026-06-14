@@ -21,6 +21,8 @@ const args = [
   "qc-report.json",
   "--pattern",
   "parcels.csv",
+  "--pattern",
+  "parcels-compact.geojson",
   "--dir",
   dstDir,
   "--clobber",

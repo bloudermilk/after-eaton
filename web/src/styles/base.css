@@ -33,6 +33,16 @@ body {
   min-height: 100vh;
 }
 
+/* Home route: pin the shell to the viewport so the cards rail + map scroll
+   internally rather than the page. Other routes keep normal page scrolling. */
+html.route-home {
+  overflow: hidden;
+}
+html.route-home #app {
+  height: 100dvh;
+  min-height: 0;
+}
+
 main {
   flex: 1;
   width: 100%;
