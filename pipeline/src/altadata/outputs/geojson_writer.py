@@ -68,6 +68,7 @@ def _to_compact_feature(
             "lfl_bucket": lfl_bucket(result),
             "adu_bucket": adu_bucket(result),
             "adds_sb9": result.adds_sb9,
+            "adds_sb1123": result.adds_sb1123,
         },
         "geometry": {"type": "Point", "coordinates": [point[0], point[1]]},
     }

@@ -37,6 +37,12 @@ const dwellingDenominator = computed(() => summary.value?.dwelling_rebuild_count
 // Like-for-like percentages are of all permitted parcels (the bucket total).
 const lflDenominator = computed(() => lflItems.value.reduce((sum, b) => sum + b.value, 0));
 
+// State-bill pathway colors, pulled from the shared metric def so the paired
+// SB-9 / SB-1123 numbers stay in lockstep with their map dots.
+const densityBuckets = getMetric("density")?.buckets ?? [];
+const sb9Color = densityBuckets.find((b) => b.key === "sb9")?.color;
+const sb1123Color = densityBuckets.find((b) => b.key === "sb1123")?.color;
+
 // The selected bucket for a card is only meaningful while that card's metric
 // is the active one.
 function selectedFor(metricId: string): string | null {
@@ -174,30 +180,49 @@ const dataAsOfLabel = computed(() => {
       </StatCard>
 
       <StatCard
-        title="SB-9 permits"
-        subtitle="Parcels with SB-9 permits filed"
+        title="Density projects"
+        subtitle="Parcels filing under state bills"
         interactive
-        :active="activeMetricId === 'sb9'"
+        :active="activeMetricId === 'density'"
         class="home__card"
         @click="centerCardOnTap"
-        @toggle="toggleMetric('sb9')"
+        @toggle="toggleMetric('density')"
       >
         <template #info>
-          <InfoButton title="SB-9 permits">
+          <InfoButton title="Density projects">
             <p>
-              California's SB-9 law (effective 2022) allows residential lots to be split and rebuilt
-              with up to two units per resulting parcel. This counts parcels whose post-fire EPIC-LA
-              permit description mentions an SB-9 unit.
+              California's <strong>SB-9</strong> (effective 2022) allows residential lots to be
+              split and rebuilt with up to two units per resulting parcel. <strong>SB 1123</strong>
+              (effective 2025) lets owners of single-family-zoned vacant lots create up to 10
+              small-lot subdivisions through a ministerial process.
+            </p>
+            <p>
+              The two pathways are mutually exclusive — a parcel uses one or the other. Each count
+              is parcels whose post-fire EPIC-LA records mention that bill in
+              <code>DESCRIPTION</code>, <code>PROJECT_NAME</code>, or <code>PROJECTNAME</code>. If a
+              parcel's records cite both, the most-recent mention wins (and the disagreement is
+              logged for review).
             </p>
           </InfoButton>
         </template>
-        <BigNumber
-          :value="summary.sb9_count"
-          label="Parcels"
-          bucket-key="true"
-          :selected-bucket="selectedFor('sb9')"
-          @select="(key) => selectBucket('sb9', key)"
-        />
+        <div class="paired-numbers">
+          <BigNumber
+            :value="summary.sb9_count"
+            label="SB 9"
+            bucket-key="sb9"
+            :color="sb9Color"
+            :selected-bucket="selectedFor('density')"
+            @select="(key) => selectBucket('density', key)"
+          />
+          <BigNumber
+            :value="summary.sb1123_count"
+            label="SB 1123"
+            bucket-key="sb1123"
+            :color="sb1123Color"
+            :selected-bucket="selectedFor('density')"
+            @select="(key) => selectBucket('density', key)"
+          />
+        </div>
       </StatCard>
 
       <div class="home__meta">
@@ -312,6 +337,14 @@ const dataAsOfLabel = computed(() => {
     font-size: var(--fs-sm);
     margin: var(--space-2) 0;
   }
+}
+
+/* Side-by-side state-bill counts (SB-9 / SB-1123) inside the density card. */
+.paired-numbers {
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-4);
+  width: 100%;
 }
 
 /* "Data as of" pill, now sitting just under the intro heading. */

@@ -141,6 +141,7 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
                 rebuild_progress_num=5,
                 added_adu_count=2,
                 adds_sb9=True,
+                adds_sb1123=False,
             ),
             JoinedParcel(
                 din=_dins("p1", _square(2.5, 5.0)), cases=[_case("p1", -118.1, 34.2)]
@@ -163,6 +164,7 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "lfl_bucket",
         "adu_bucket",
         "adds_sb9",
+        "adds_sb1123",
     }
     assert feat["properties"] == {
         "ain": "p1",
@@ -171,6 +173,7 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "lfl_bucket": "lfl",
         "adu_bucket": "added_2",
         "adds_sb9": True,
+        "adds_sb1123": False,
     }
 
 

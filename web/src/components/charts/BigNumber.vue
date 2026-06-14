@@ -5,6 +5,8 @@ const props = defineProps<{
   // Map bucket key; when present the number is clickable and selects on the map.
   bucketKey?: string;
   selectedBucket?: string | null;
+  // Tint for the value, matching this bucket's map-dot color. Defaults to poppy.
+  color?: string;
 }>();
 
 const emit = defineEmits<{ select: [key: string] }>();
@@ -26,7 +28,9 @@ function onSelect(): void {
     :aria-pressed="bucketKey ? bucketKey === selectedBucket : undefined"
     @click="onSelect"
   >
-    <span class="big-number__value">{{ value.toLocaleString() }}</span>
+    <span class="big-number__value" :style="color ? { color } : undefined">{{
+      value.toLocaleString()
+    }}</span>
     <span v-if="label" class="big-number__label">{{ label }}</span>
   </component>
 </template>

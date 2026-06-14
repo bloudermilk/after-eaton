@@ -9,7 +9,7 @@ import type { ExpressionSpecification, FilterSpecification } from "maplibre-gl";
 
 import type { Summary } from "@/types";
 
-export type MetricId = "sfr_size" | "lfl" | "adu" | "sb9";
+export type MetricId = "sfr_size" | "lfl" | "adu" | "density";
 export type ChartKind = "vbars" | "donut" | "dist" | "bignumber";
 
 // Only the numeric (count) fields of Summary are valid card sources.
@@ -53,8 +53,17 @@ export const NEUTRAL_DOT = "#9a9488";
 // recursive style-spec tuple types.
 const get = (prop: string): ExpressionSpecification =>
   ["get", prop] as unknown as ExpressionSpecification;
-// adds_sb9 is a boolean; stringify so it shares the same string-key machinery.
-const sb9Value = ["to-string", ["get", "adds_sb9"]] as unknown as ExpressionSpecification;
+// adds_sb9 / adds_sb1123 are booleans; resolve each parcel to its state-bill
+// pathway. The two are mutually exclusive in the pipeline (most-recent wins),
+// so a parcel is at most one of "sb9" / "sb1123"; everything else is "none".
+const densityValue = [
+  "case",
+  ["get", "adds_sb9"],
+  "sb9",
+  ["get", "adds_sb1123"],
+  "sb1123",
+  "none",
+] as unknown as ExpressionSpecification;
 
 export const METRICS: MetricDef[] = [
   {
@@ -131,12 +140,15 @@ export const METRICS: MetricDef[] = [
     ],
   },
   {
-    id: "sb9",
-    title: "SB-9 permits",
-    subtitle: "Parcels with SB-9 permits filed",
+    id: "density",
+    title: "Density projects",
+    subtitle: "Parcels filing under state bills",
     chart: "bignumber",
-    valueExpr: sb9Value,
-    buckets: [{ key: "true", label: "SB-9 filed", color: C.poppy, summaryKey: "sb9_count" }],
+    valueExpr: densityValue,
+    buckets: [
+      { key: "sb9", label: "SB 9", color: C.poppy, summaryKey: "sb9_count" },
+      { key: "sb1123", label: "SB 1123", color: C.lupin, summaryKey: "sb1123_count" },
+    ],
   },
 ];
 

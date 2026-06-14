@@ -43,6 +43,7 @@ export interface ParcelProperties {
   lfl_bucket: string;
   adu_bucket: string;
   adds_sb9: boolean;
+  adds_sb1123: boolean;
 }
 
 export interface ParcelFeature {
