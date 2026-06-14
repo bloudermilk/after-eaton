@@ -13,7 +13,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "data:fetch-local": "node scripts/fetch-data-local.mjs",
-    "data:fetch-release": "node scripts/fetch-data-release.mjs"
+    "data:fetch-release": "node scripts/fetch-data-release.mjs",
+    "map:build-style": "node scripts/build-map-style.mjs"
   },
   "dependencies": {
     "maplibre-gl": "^5.24.0",

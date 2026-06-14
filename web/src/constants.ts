@@ -22,5 +22,8 @@ export const ALTADENA_BOUNDS: [[number, number], [number, number]] = [
   [-118.095, 34.2146],
 ];
 
-// Free vector basemap (no API key). See https://openfreemap.org/.
-export const BASEMAP_STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
+// Our warm, on-brand recolor of OpenFreeMap's positron basemap. Self-hosted
+// from public/ as a static style.json, while the vector/raster tiles, sprites,
+// and glyphs all stay on OpenFreeMap's free host. Rebuild with
+// `npm run map:build-style`; see scripts/build-map-style.mjs.
+export const BASEMAP_STYLE_URL = `${baseUrl}map-style.json`;
