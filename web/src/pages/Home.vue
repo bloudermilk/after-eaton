@@ -10,10 +10,9 @@ import ParcelMap from "@/components/map/ParcelMap.vue";
 import { useDataset } from "@/composables/useDataset";
 import { useMapSelection } from "@/composables/useMapSelection";
 import { useParcels } from "@/composables/useParcels";
-import { DATA_PATHS, REPO_URL } from "@/constants";
 import { getMetric } from "@/metrics";
 
-const { summary, generatedAt } = useDataset();
+const { summary } = useDataset();
 const { parcels } = useParcels();
 const { filterSet, focusedMetricId, selectedBucketsFor, toggleMetric, selectBucket } =
   useMapSelection();
@@ -103,30 +102,16 @@ onBeforeUnmount(() => {
   railEl.value?.removeEventListener("scroll", onRailScroll);
   clearTimeout(scrollSettleTimer);
 });
-
-const dataAsOfLabel = computed(() => {
-  if (!generatedAt.value) return null;
-  return generatedAt.value.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "America/Los_Angeles",
-    timeZoneName: "short",
-  });
-});
 </script>
 
 <template>
   <main v-if="summary" class="home">
     <div ref="railEl" class="home__rail">
       <div class="home__intro">
-        <h1>Rebuilding Altadena</h1>
         <p>
-          A living analysis of how Altadena is rebuilding after the Eaton Fire of 2025. Tap a metric
-          to map it; tap a bucket to isolate it. Shift-click to combine buckets and metrics.
+          Tap a metric to map it; tap a bucket to isolate it. Shift-click to combine buckets and
+          metrics.
         </p>
-        <p v-if="dataAsOfLabel" class="home__pill">Data as of {{ dataAsOfLabel }}</p>
       </div>
 
       <StatCard
@@ -317,18 +302,6 @@ const dataAsOfLabel = computed(() => {
           />
         </div>
       </StatCard>
-
-      <div class="home__meta">
-        <p class="home__about">
-          <strong>Altadata</strong> is free and open source. Built by Altadenans, for Altadena.
-          <a :href="REPO_URL" target="_blank" rel="noopener">View source on GitHub</a>.
-        </p>
-        <nav class="home__links" aria-label="Site">
-          <RouterLink to="/methodology">Methodology</RouterLink>
-          <RouterLink to="/quality-control">Quality Control</RouterLink>
-          <a :href="DATA_PATHS.parcelsCsv" download>Download parcels.csv</a>
-        </nav>
-      </div>
     </div>
 
     <div class="home__map">
@@ -381,9 +354,8 @@ const dataAsOfLabel = computed(() => {
   pointer-events: auto;
 }
 
-/* Intro + meta only show in the wide vertical rail; the narrow row is cards. */
-.home__intro,
-.home__meta {
+/* The intro hint only shows in the wide vertical rail; the narrow row is cards. */
+.home__intro {
   display: none;
 }
 
@@ -427,19 +399,14 @@ const dataAsOfLabel = computed(() => {
     width: 100%;
   }
 
-  .home__intro,
-  .home__meta {
+  .home__intro {
     display: block;
   }
 
-  .home__intro h1 {
-    font-size: var(--fs-xl);
-    margin-bottom: var(--space-2);
-  }
   .home__intro p {
     color: var(--color-ink-muted);
     font-size: var(--fs-sm);
-    margin: var(--space-2) 0;
+    margin: 0 0 var(--space-2);
   }
 }
 
@@ -449,39 +416,5 @@ const dataAsOfLabel = computed(() => {
   flex-direction: row;
   gap: var(--space-4);
   width: 100%;
-}
-
-/* "Data as of" pill, now sitting just under the intro heading. */
-.home__pill {
-  display: inline-block;
-  background: var(--color-paper);
-  border: 1px solid var(--color-rule);
-  padding: var(--space-2) var(--space-3);
-  border-radius: 999px;
-  font-size: var(--fs-xs);
-  margin: var(--space-3) 0 0;
-}
-
-/* --- Rail meta (folded-in footer) --------------------------------------- */
-.home__meta {
-  margin-top: auto;
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-rule);
-}
-
-.home__about {
-  color: var(--color-ink-muted);
-  font-size: var(--fs-sm);
-  margin: 0 0 var(--space-3);
-}
-.home__about strong {
-  color: var(--color-ink);
-}
-
-.home__links {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  font-size: var(--fs-sm);
 }
 </style>

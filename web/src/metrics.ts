@@ -148,7 +148,7 @@ export const METRICS: MetricDef[] = [
       },
       {
         key: "construction_completed",
-        label: "Construction completed",
+        label: "Completed",
         color: C.poppy,
         summaryKey: "rebuild_new_construction_completed_parcels",
         stage: 7,

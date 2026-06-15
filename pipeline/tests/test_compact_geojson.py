@@ -180,6 +180,8 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "post_sfr_sqft",
         "pre_adu_count",
         "post_adu_count",
+        "pre_adu_sqft",
+        "post_adu_sqft",
         "added_adu_count",
         "damage",
         "bsd_status",
@@ -204,6 +206,9 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "post_sfr_sqft": 1500,
         "pre_adu_count": 0,
         "post_adu_count": None,
+        # _result defaults both ADU sqft to None (no ADU on this parcel).
+        "pre_adu_sqft": None,
+        "post_adu_sqft": None,
         "added_adu_count": 2,
         # _result fixes damage=DESTROYED and defaults bsd_status to RED.
         "damage": "destroyed",

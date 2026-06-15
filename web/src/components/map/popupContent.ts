@@ -59,7 +59,7 @@ export function buildPopupContent(props: ParcelProperties): HTMLElement {
   addRow(grid, "Damage", bsdLabel ? `${damageLabel} · ${bsdLabel}` : damageLabel);
 
   // New-construction funnel position (stages 3–7 → "Plans received" …
-  // "Construction completed"). Stage 0 means no new-building permit has reached
+  // "Completed"). Stage 0 means no new-building permit has reached
   // plan check yet — the funnel's first row is "Plans received" (stage 3), so
   // there's no bucket for stage 0 and we show a clearer phrase instead.
   const stageLabel =
@@ -70,13 +70,19 @@ export function buildPopupContent(props: ParcelProperties): HTMLElement {
   addRow(grid, "Rebuild stage", stageLabel);
 
   // Pre → post structure figures (post is null until a rebuild permit is filed).
-  const sqft =
+  // Counts and sizes are paired per dwelling type: SFRs then ADUs.
+  const sfrSqft =
     props.pre_sfr_sqft == null && props.post_sfr_sqft == null
       ? "—"
       : `${dash(props.pre_sfr_sqft)} → ${dash(props.post_sfr_sqft)} sq ft`;
-  addRow(grid, "SFR size", sqft);
+  const aduSqft =
+    props.pre_adu_sqft == null && props.post_adu_sqft == null
+      ? "—"
+      : `${dash(props.pre_adu_sqft)} → ${dash(props.post_adu_sqft)} sq ft`;
   addRow(grid, "SFRs", `${dash(props.pre_sfr_count)} → ${dash(props.post_sfr_count)}`);
+  addRow(grid, "SFRs size", sfrSqft);
   addRow(grid, "ADUs", `${dash(props.pre_adu_count)} → ${dash(props.post_adu_count)}`);
+  addRow(grid, "ADUs size", aduSqft);
 
   // Like-for-like — omitted when the parcel has no permit at all (bucket "none").
   const lflLabel = getMetric("lfl")?.buckets.find((b) => b.key === props.lfl_bucket)?.label;

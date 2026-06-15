@@ -99,6 +99,8 @@ def _to_compact_feature(
         "post_sfr_sqft": result.post_sfr_sqft,
         "pre_adu_count": result.pre_adu_count,
         "post_adu_count": result.post_adu_count,
+        "pre_adu_sqft": result.pre_adu_sqft,
+        "post_adu_sqft": result.post_adu_sqft,
         "added_adu_count": result.added_adu_count,
         # FIRESCOPE %-loss bucket (destroyed/major/…) and full Red/Yellow/Green
         # safety tag, for context in the popup.
