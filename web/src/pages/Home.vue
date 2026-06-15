@@ -107,13 +107,6 @@ onBeforeUnmount(() => {
 <template>
   <main v-if="summary" class="home">
     <div ref="railEl" class="home__rail">
-      <div class="home__intro">
-        <p>
-          Tap a metric to map it; tap a bucket to isolate it. Shift-click to combine buckets and
-          metrics.
-        </p>
-      </div>
-
       <StatCard
         title="New construction"
         subtitle="Rebuild milestones"
@@ -354,11 +347,6 @@ onBeforeUnmount(() => {
   pointer-events: auto;
 }
 
-/* The intro hint only shows in the wide vertical rail; the narrow row is cards. */
-.home__intro {
-  display: none;
-}
-
 .home__map {
   flex: 1;
   min-height: 0;
@@ -397,16 +385,6 @@ onBeforeUnmount(() => {
   .home__rail :deep(.stat-card) {
     flex: 0 0 auto;
     width: 100%;
-  }
-
-  .home__intro {
-    display: block;
-  }
-
-  .home__intro p {
-    color: var(--color-ink-muted);
-    font-size: var(--fs-sm);
-    margin: 0 0 var(--space-2);
   }
 }
 
