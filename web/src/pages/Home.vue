@@ -306,28 +306,38 @@ const dataAsOfLabel = computed(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Anchor point for the bottom-overlay rail on mobile. */
+  position: relative;
 }
 
 /* --- The cards rail ------------------------------------------------------ */
-/* Narrow / portrait: a horizontal scroller of cards, ~31% of the viewport. */
+/* Narrow / portrait: a transparent overlay anchored to the bottom of the
+   full-height map. Cards keep their natural height and float over the map. */
 .home__rail {
-  flex: 0 0 31vh;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   flex-direction: row;
+  align-items: flex-end;
   gap: var(--space-4);
   padding: var(--space-4);
   overflow-x: auto;
   overflow-y: hidden;
-  background: var(--color-paper-deep);
-  /* Rail sits at the bottom on mobile, so the divider is on its top edge. */
-  border-top: 1px solid var(--color-rule);
+  background: transparent;
   scroll-snap-type: x mandatory;
+  /* Let touches fall through the transparent gaps to the map; cards opt back
+     in below so they stay tappable and scrollable. */
+  pointer-events: none;
 }
 
 .home__rail :deep(.stat-card) {
-  flex: 0 0 84%;
+  flex: 0 0 88%;
   /* Center each card so middle cards show an equal peek of their neighbors. */
   scroll-snap-align: center;
+  pointer-events: auto;
 }
 
 /* Intro + meta only show in the wide vertical rail; the narrow row is cards. */
@@ -351,14 +361,19 @@ const dataAsOfLabel = computed(() => {
   }
 
   .home__rail {
+    /* Restore the static left-sidebar column (resets the mobile overlay). */
+    position: static;
     flex: 0 0 400px;
     flex-direction: column;
+    align-items: stretch;
     max-width: 40%;
     overflow-x: hidden;
     overflow-y: auto;
+    background: var(--color-paper-deep);
     border-top: none;
     border-right: 1px solid var(--color-rule);
     scroll-snap-type: none;
+    pointer-events: auto;
   }
 
   /* Restore natural order: rail on the left, map on the right. */

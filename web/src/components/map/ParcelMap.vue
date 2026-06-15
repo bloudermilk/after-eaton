@@ -197,6 +197,13 @@ watch(() => [props.focusedMetricId, props.filterSet], applySelection, { deep: tr
 .parcel-map :deep(.maplibregl-canvas) {
   outline: none;
 }
+/* On mobile the bottom cards overlay the map, so the attribution would be
+   obscured anyway — hide it entirely below the desktop breakpoint. */
+@media (max-width: 767.98px) {
+  .parcel-map :deep(.maplibregl-ctrl-attrib) {
+    display: none;
+  }
+}
 </style>
 
 <!-- Un-scoped: maplibre injects the popup outside this component's DOM, so a
