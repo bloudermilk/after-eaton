@@ -48,6 +48,7 @@ jobs:
             --pattern qc-report.json \
             --pattern parcels.csv \
             --pattern parcels-compact.geojson \
+            --pattern fire-perimeter.geojson \
             --dir web/public/data \
             --clobber
 

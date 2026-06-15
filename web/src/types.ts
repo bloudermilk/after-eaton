@@ -54,16 +54,8 @@ export interface ParcelProperties {
   // post-fire Safety Assessment. Drives the funnel's "Damaged or destroyed"
   // baseline filter (== summary.bsd_red_or_yellow_count).
   bsd_red_or_yellow: boolean;
-  // Rebuild-progress: a boolean per milestone, true when the parcel reached
-  // that stage or beyond (for "at or past stage N" map filtering), plus
-  // `rebuild_stage` (furthest milestone reached, 0–7) for the stage color ramp.
-  rebuild_app_received: boolean;
-  rebuild_zoning_cleared: boolean;
-  rebuild_plans_received: boolean;
-  rebuild_plans_approved: boolean;
-  rebuild_permit_issued: boolean;
-  rebuild_in_construction: boolean;
-  rebuild_construction_completed: boolean;
+  // Furthest rebuild milestone reached (0–7). Drives the stage color ramp and
+  // the "at or past stage N" map filter (expressed as `rebuild_stage >= N`).
   rebuild_stage: number;
   // Raw counts/sqft + classifications read only by the per-parcel detail popup
   // (the buckets above drive the map coloring). Post-fire fields are null when
@@ -91,6 +83,24 @@ export interface ParcelFeatureCollection {
   type: "FeatureCollection";
   metadata?: { generated_at: string };
   features: ParcelFeature[];
+}
+
+// Shape of fire-perimeter.geojson — a single dissolved (Multi)Polygon the map
+// draws as a thin outline for burn-area context. The map reads no properties;
+// they're carried for debugging/attribution only.
+export interface FirePerimeterFeature {
+  type: "Feature";
+  geometry: {
+    type: "Polygon" | "MultiPolygon";
+    coordinates: number[][][] | number[][][][];
+  };
+  properties: Record<string, unknown>;
+}
+
+export interface FirePerimeterFeatureCollection {
+  type: "FeatureCollection";
+  metadata?: { generated_at: string };
+  features: FirePerimeterFeature[];
 }
 
 export type WarningSeverity = "data" | "info";

@@ -12,6 +12,7 @@ import click
 from dotenv import load_dotenv
 
 from .outputs.csv_writer import write_parcels_csv
+from .outputs.fire_perimeter_writer import write_fire_perimeter_geojson
 from .outputs.geojson_writer import (
     write_parcels_compact_geojson,
     write_parcels_geojson,
@@ -291,6 +292,10 @@ def run(
         generated_at=generated_at,
     )
     write_parcels_csv(results, out_dir / "parcels.csv")
+
+    write_fire_perimeter_geojson(
+        perimeter, out_dir / "fire-perimeter.geojson", generated_at=generated_at
+    )
 
     write_regions_geojson(
         tract_aggregation.features,

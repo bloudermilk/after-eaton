@@ -9,6 +9,7 @@ export const DATA_PATHS = {
   qcReport: `${baseUrl}data/qc-report.json`,
   parcelsCsv: `${baseUrl}data/parcels.csv`,
   parcelsCompact: `${baseUrl}data/parcels-compact.geojson`,
+  firePerimeter: `${baseUrl}data/fire-perimeter.geojson`,
 } as const;
 
 // Frontend treats data older than this as stale and shows a banner.

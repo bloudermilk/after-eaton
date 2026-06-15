@@ -68,6 +68,7 @@ jobs:
             data/parcels.csv
             data/summary.json
             data/qc-report.json
+            data/fire-perimeter.geojson
             data/2020-census-tracts.geojson
             data/2020-census-block-groups.geojson
             data/source-dins.json

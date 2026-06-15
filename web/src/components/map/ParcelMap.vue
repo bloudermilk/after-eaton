@@ -12,6 +12,7 @@ import {
 } from "maplibre-gl";
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 
+import { useFirePerimeter } from "@/composables/useFirePerimeter";
 import { ALTADENA_BOUNDS, BASEMAP_STYLE_URL } from "@/constants";
 import { buildMapColor, buildMapFilter, type FilterSet, getMetric, NEUTRAL_DOT } from "@/metrics";
 import type { ParcelFeatureCollection, ParcelProperties } from "@/types";
@@ -28,6 +29,12 @@ const props = defineProps<{
 
 const SOURCE_ID = "parcels";
 const LAYER_ID = "parcels-circles";
+const FIRE_PERIMETER_SOURCE_ID = "fire-perimeter";
+const FIRE_PERIMETER_LAYER_ID = "fire-perimeter-outline";
+// Thin dry-clay (terracotta) burn-area outline, drawn beneath the parcel dots.
+// A muted, lightened cousin of the brand brick-red (--color-danger #b34931) so
+// it reads as earthy context against the warm basemap rather than fighting it.
+const FIRE_PERIMETER_COLOR = "#b3694e";
 
 const container = ref<HTMLDivElement | null>(null);
 // shallowRef: the maplibre Map is imperative — never wrap it in a deep proxy.
@@ -35,6 +42,8 @@ const map = shallowRef<MaplibreMap | null>(null);
 // One reused popup, opened on marker click (see registerInteractions).
 const popup = shallowRef<Popup | null>(null);
 const ready = shallowRef(false);
+// Burn-area outline, loaded independently of the parcels (map-only context).
+const { perimeter } = useFirePerimeter();
 
 onMounted(() => {
   if (!container.value) return;
@@ -57,6 +66,7 @@ onMounted(() => {
   m.on("load", () => {
     ready.value = true;
     applyData();
+    applyFirePerimeter();
     applySelection();
     registerInteractions(m);
   });
@@ -119,6 +129,37 @@ function applyData(): void {
   applySelection();
 }
 
+/** Add (or refresh) the burn-area outline source + line layer. Inserted beneath
+ * the parcel circles (via beforeId) so the dots stay on top; a null perimeter
+ * (fetch failed or not yet published) simply draws nothing. */
+function applyFirePerimeter(): void {
+  const m = map.value;
+  if (!m || !ready.value || !perimeter.value) return;
+  const data = perimeter.value as unknown as GeoJSONSourceSpecification["data"];
+  const existing = m.getSource(FIRE_PERIMETER_SOURCE_ID) as GeoJSONSource | undefined;
+  if (existing) {
+    existing.setData(data);
+    return;
+  }
+  m.addSource(FIRE_PERIMETER_SOURCE_ID, { type: "geojson", data });
+  // Keep the outline below the parcel dots whenever that layer already exists.
+  const beforeId = m.getLayer(LAYER_ID) ? LAYER_ID : undefined;
+  m.addLayer(
+    {
+      id: FIRE_PERIMETER_LAYER_ID,
+      type: "line",
+      source: FIRE_PERIMETER_SOURCE_ID,
+      layout: { "line-join": "round", "line-cap": "round" },
+      paint: {
+        "line-color": FIRE_PERIMETER_COLOR,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 1.5, 16, 2],
+        "line-opacity": 0.8,
+      },
+    },
+    beforeId,
+  );
+}
+
 /** Reflect the focused metric + filter set into the layer's filter + color. */
 function applySelection(): void {
   const m = map.value;
@@ -139,6 +180,7 @@ function applySelection(): void {
 }
 
 watch(() => props.geojson, applyData);
+watch(() => perimeter.value, applyFirePerimeter);
 watch(() => [props.focusedMetricId, props.filterSet], applySelection, { deep: true });
 </script>
 

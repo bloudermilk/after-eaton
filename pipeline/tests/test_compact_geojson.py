@@ -169,13 +169,6 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "adds_sb9",
         "adds_sb1123",
         "bsd_red_or_yellow",
-        "rebuild_app_received",
-        "rebuild_zoning_cleared",
-        "rebuild_plans_received",
-        "rebuild_plans_approved",
-        "rebuild_permit_issued",
-        "rebuild_in_construction",
-        "rebuild_construction_completed",
         "rebuild_stage",
         # Raw counts/sqft + classifications for the detail popup.
         "pre_sfr_count",
@@ -198,14 +191,7 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "adds_sb1123": False,
         # _result defaults bsd_status to RED → in the damaged/destroyed scope.
         "bsd_red_or_yellow": True,
-        # _result defaults rebuild_stage to 0, so no stage is reached.
-        "rebuild_app_received": False,
-        "rebuild_zoning_cleared": False,
-        "rebuild_plans_received": False,
-        "rebuild_plans_approved": False,
-        "rebuild_permit_issued": False,
-        "rebuild_in_construction": False,
-        "rebuild_construction_completed": False,
+        # _result defaults rebuild_stage to 0.
         "rebuild_stage": 0,
         # _result fixes pre_sfr_count=1, pre_adu_count=0, post_*_count=None.
         "pre_sfr_count": 1,
@@ -221,10 +207,10 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
     }
 
 
-def test_compact_geojson_stage_flags_are_cumulative(tmp_path: Path) -> None:
-    """A parcel at stage 5 is flagged for every stage up to 5 and none beyond,
-    so selecting any of those stages on the map lights this dot — matching the
-    monotonic card counts."""
+def test_compact_geojson_omits_per_stage_booleans(tmp_path: Path) -> None:
+    """The compact file carries only `rebuild_stage`; the old per-milestone
+    booleans (just `rebuild_stage >= N` denormalized) are dropped to keep the
+    web payload lean. The map derives "at or past stage N" from rebuild_stage."""
     pairs = [
         (
             _result("p1", rebuild_progress_num=5, rebuild_stage=5),
@@ -238,13 +224,25 @@ def test_compact_geojson_stage_flags_are_cumulative(tmp_path: Path) -> None:
 
     props = json.loads(out.read_text())["features"][0]["properties"]
     assert props["rebuild_stage"] == 5
-    assert props["rebuild_app_received"] is True
-    assert props["rebuild_zoning_cleared"] is True
-    assert props["rebuild_plans_received"] is True
-    assert props["rebuild_plans_approved"] is True
-    assert props["rebuild_permit_issued"] is True
-    assert props["rebuild_in_construction"] is False
-    assert props["rebuild_construction_completed"] is False
+    assert not any(k.startswith("rebuild_") and k != "rebuild_stage" for k in props)
+
+
+def test_compact_geojson_rounds_coordinates(tmp_path: Path) -> None:
+    """Point coordinates are rounded to keep the web payload small; full
+    precision lives in parcels.geojson."""
+    pairs = [
+        (
+            _result("p1"),
+            JoinedParcel(
+                din=_dins("p1", _square(2.5, 5.0)),
+                cases=[_case("p1", -118.123456789, 34.187654321)],
+            ),
+        ),
+    ]
+    out = tmp_path / "parcels-compact.geojson"
+    write_parcels_compact_geojson(pairs, out, generated_at="2026-06-13T00:00:00+00:00")
+    coords = json.loads(out.read_text())["features"][0]["geometry"]["coordinates"]
+    assert coords == [-118.12346, 34.18765]
 
 
 def test_compact_geojson_bsd_red_or_yellow_flag(tmp_path: Path) -> None:
