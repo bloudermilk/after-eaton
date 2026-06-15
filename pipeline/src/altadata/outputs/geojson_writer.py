@@ -84,6 +84,11 @@ def _to_compact_feature(
         # denormalized, so the map derives them from this instead — keeping the
         # web payload lean. (Full detail stays in parcels.geojson.)
         "rebuild_stage": result.rebuild_stage,
+        # Furthest new-building ("New" workclass) milestone reached (0 or 3-7).
+        # Drives the published "New construction milestones" funnel: the map
+        # colors destroyed parcels by this and filters to one stage when a row is
+        # tapped. The `damage` field below supplies the destroyed-only baseline.
+        "rebuild_new_stage": result.rebuild_new_stage,
         # Raw pre/post counts + sqft and the damage/safety classifications power
         # the per-parcel detail popup. The buckets above are for coloring; the
         # popup shows the underlying numbers. Post-fire fields stay null (not 0)

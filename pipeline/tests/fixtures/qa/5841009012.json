@@ -214,6 +214,8 @@
     "added_adu_count": 2,
     "rebuild_progress_num": 4,
     "lfl_claimed": null,
-    "sfr_size_comparison": "larger"
+    "sfr_size_comparison": "larger",
+    "_new_stage_note": "rebuild_stage=4 comes from a 'Rebuild Project' record, but there is no 'New' building permit, so rebuild_new_stage=0 and this parcel is outside the published new-construction funnel.",
+    "rebuild_new_stage": 0
   }
 }

@@ -43,3 +43,5 @@ def test_qa_parcel_matches_expected(qa_fixture: dict[str, Any]) -> None:
         } == milestones
     if "rebuild_stage" in expected:
         assert result.rebuild_stage == expected["rebuild_stage"]
+    if "rebuild_new_stage" in expected:
+        assert result.rebuild_new_stage == expected["rebuild_new_stage"]

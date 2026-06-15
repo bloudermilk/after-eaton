@@ -59,6 +59,7 @@
     "lfl_claimed": null,
     "sfr_size_comparison": null,
     "rebuild_stage": 0,
+    "rebuild_new_stage": 0,
     "rebuild_milestone_cases": {
       "app_received": 0,
       "zoning_cleared": 0,

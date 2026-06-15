@@ -282,6 +282,7 @@
     "added_adu_count": 0,
     "rebuild_progress_num": 6,
     "lfl_claimed": true,
-    "sfr_size_comparison": "larger"
+    "sfr_size_comparison": "larger",
+    "rebuild_new_stage": 6
   }
 }

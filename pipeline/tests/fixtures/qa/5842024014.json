@@ -296,6 +296,7 @@
       "in_construction": 0,
       "construction_completed": 1
     },
-    "rebuild_stage": 7
+    "rebuild_stage": 7,
+    "rebuild_new_stage": 7
   }
 }

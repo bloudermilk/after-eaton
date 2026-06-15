@@ -31,9 +31,9 @@ export interface MetricBucket {
   /** Count field on summary.json that the card reads for this bucket. */
   summaryKey: SummaryCountKey;
   /**
-   * "stage" metrics only: the milestone's ordinal (0–7). It drives the color
-   * ramp (metricColorStage) and is the exact value the map filters
-   * `rebuild_stage` against when this bucket is selected (metricFilterStage).
+   * "stage" metrics only: the milestone's ordinal (0, then 3–7). It drives the
+   * color ramp (metricColorStage) and is the exact value the map filters
+   * `rebuild_new_stage` against when this bucket is selected (metricFilterStage).
    */
   stage?: number;
 }
@@ -46,9 +46,9 @@ export interface MetricDef {
   /**
    * How this metric paints/filters the map. "bucket" (default): each parcel
    * resolves to exactly one bucket via `valueExpr`. "stage": the map colors
-   * every damaged parcel by `rebuild_stage` (the furthest milestone it
-   * reached); selecting a bucket filters to the parcels currently AT that
-   * stage, so the lit dots share one color (see metricColorStage /
+   * every destroyed parcel by `rebuild_new_stage` (the furthest new-building
+   * milestone it reached); selecting a bucket filters to the parcels currently
+   * AT that stage, so the lit dots share one color (see metricColorStage /
    * metricFilterStage). The card list, by contrast, stays cumulative.
    */
   mapMode?: "bucket" | "stage";
@@ -100,75 +100,63 @@ export const METRICS: MetricDef[] = [
   {
     id: "rebuild_progress",
     title: "Rebuild progress",
-    subtitle: "Permitting milestones reached",
+    subtitle: "New construction milestones",
     chart: "stagelist",
     mapMode: "stage",
-    // Unused in stage mode (the stage helpers read `rebuild_stage` directly)
+    // Unused in stage mode (the stage helpers read `rebuild_new_stage` directly)
     // but kept non-null to satisfy the type.
-    valueExpr: get("rebuild_stage"),
-    // Rebuild funnel. The first bucket, "Damaged or destroyed" (stage 0), is the
-    // baseline/denominator — LA County's published "Damaged/Destroyed Parcels"
-    // scope (Red+Yellow safety tags); it reads 100% in the card. The seven
-    // milestone buckets below come from the `*_parcels` summary fields, which are
-    // MONOTONIC: a parcel is counted at every stage up to the furthest it reached,
-    // so the rows strictly decline (this differs from LA County's non-monotonic
-    // case-level dashboard). `stage` orders the color ramp and is what the map
-    // filters `rebuild_stage` against when a row is selected.
+    valueExpr: get("rebuild_new_stage"),
+    // New-construction funnel — a single rebuild pathway (new-building "New"
+    // permits) on FIRESCOPE-destroyed parcels. The first bucket, "Destroyed
+    // structure" (stage 0), is the baseline/denominator (`destroyed_parcels`) and
+    // reads 100% in the card. The milestone buckets read the `rebuild_new_*`
+    // summary fields, which are MONOTONIC: a parcel counts at every stage up to
+    // the furthest it reached, so the rows strictly decline. The funnel starts at
+    // "Plans received" (stage 3) — new-building permits never carry the earlier
+    // application/zoning milestones (those live on the preceding plan records and
+    // will get their own funnel). `stage` orders the color ramp and is what the
+    // map filters `rebuild_new_stage` against when a row is selected.
     buckets: [
       {
-        key: "damaged_destroyed",
-        label: "Damaged or destroyed",
+        key: "destroyed",
+        label: "Destroyed structure",
         color: NEUTRAL_DOT,
-        summaryKey: "bsd_red_or_yellow_count",
+        summaryKey: "destroyed_parcels",
         stage: 0,
-      },
-      {
-        key: "app_received",
-        label: "Application received",
-        color: C.deodaraSoft,
-        summaryKey: "rebuild_app_received_parcels",
-        stage: 1,
-      },
-      {
-        key: "zoning_cleared",
-        label: "Zoning cleared",
-        color: C.deodara,
-        summaryKey: "rebuild_zoning_cleared_parcels",
-        stage: 2,
       },
       {
         key: "plans_received",
         label: "Plans received",
         color: C.lupinSoft,
-        summaryKey: "rebuild_plans_received_parcels",
+        summaryKey: "rebuild_new_plans_received_parcels",
         stage: 3,
       },
       {
         key: "plans_approved",
         label: "Plans approved",
         color: C.lupin,
-        summaryKey: "rebuild_plans_approved_parcels",
+        summaryKey: "rebuild_new_plans_approved_parcels",
         stage: 4,
       },
       {
         key: "permit_issued",
         label: "Permits issued",
         color: C.liveOak,
-        summaryKey: "rebuild_permit_issued_parcels",
+        summaryKey: "rebuild_new_permit_issued_parcels",
         stage: 5,
       },
       {
         key: "in_construction",
         label: "In construction",
         color: C.poppySoft,
-        summaryKey: "rebuild_in_construction_parcels",
+        summaryKey: "rebuild_new_in_construction_parcels",
         stage: 6,
       },
       {
         key: "construction_completed",
         label: "Construction completed",
         color: C.poppy,
-        summaryKey: "rebuild_construction_completed_parcels",
+        summaryKey: "rebuild_new_construction_completed_parcels",
         stage: 7,
       },
     ],
@@ -282,39 +270,41 @@ export function metricColor(metric: MetricDef): ExpressionSpecification {
 
 // ----- "stage" map mode (color by current stage, filter to one stage) -------
 // A parcel belongs to every stage up to the furthest it reached, so it can't
-// resolve to a single bucket key. Instead we color every damaged parcel by
-// `rebuild_stage` (furthest milestone reached); selecting a bucket filters to
-// the parcels currently AT that stage, so the lit dots share one color. (The
-// card list stays cumulative, so its count exceeds the lit dots for a row.)
+// resolve to a single bucket key. Instead we color every destroyed parcel by
+// `rebuild_new_stage` (furthest new-building milestone reached); selecting a
+// bucket filters to the parcels currently AT that stage, so the lit dots share
+// one color. (The card list stays cumulative, so its count exceeds the lit dots
+// for a row.)
 
 /** Color each parcel by the furthest milestone it reached (the stage ramp). */
 export function metricColorStage(metric: MetricDef): ExpressionSpecification {
   const pairs = metric.buckets.flatMap((b) => [b.stage as number, b.color]);
   return [
     "match",
-    ["get", "rebuild_stage"],
+    ["get", "rebuild_new_stage"],
     ...pairs,
     NEUTRAL_DOT,
   ] as unknown as ExpressionSpecification;
 }
 
 /**
- * The damaged set (`bsd_red_or_yellow`) is the map's universe in stage mode.
- * With no selected buckets, show every damaged parcel (colored by its current
- * stage); with some selected, narrow to the parcels currently AT those stages
- * (the stages combine with OR). The stage-0 "Damaged or destroyed" row therefore
- * means "damaged but not yet started," not every parcel at stage 0.
+ * The destroyed set (FIRESCOPE `damage == "destroyed"`) is the map's universe in
+ * stage mode — it's the funnel's baseline. With no selected buckets, show every
+ * destroyed parcel (colored by its current stage); with some selected, narrow to
+ * the parcels currently AT those stages (the stages combine with OR). The stage-0
+ * "Destroyed structure" row therefore means "destroyed but no new-build permit
+ * yet," not every parcel at stage 0.
  */
 export function metricFilterStage(metric: MetricDef, keys: readonly string[]): FilterSpecification {
-  const damaged = ["==", ["get", "bsd_red_or_yellow"], true];
+  const destroyed = ["==", ["get", "damage"], "destroyed"];
   if (keys.length === 0) {
-    return damaged as unknown as FilterSpecification;
+    return destroyed as unknown as FilterSpecification;
   }
   const stages = keys.map((k) => metric.buckets.find((b) => b.key === k)?.stage ?? 0);
   return [
     "all",
-    damaged,
-    ["in", ["get", "rebuild_stage"], ["literal", stages]],
+    destroyed,
+    ["in", ["get", "rebuild_new_stage"], ["literal", stages]],
   ] as unknown as FilterSpecification;
 }
 

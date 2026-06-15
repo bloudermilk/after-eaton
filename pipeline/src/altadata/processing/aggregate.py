@@ -41,6 +41,18 @@ class RegionCounts:
     rebuild_permit_issued_parcels: int
     rebuild_in_construction_parcels: int
     rebuild_construction_completed_parcels: int
+    # New-construction milestones funnel — the one published in the app. Counts
+    # only parcels with a new-building ("New" workclass) permit (`rebuild_new_stage`)
+    # AND a FIRESCOPE-destroyed structure, so it tracks the single "rebuild a
+    # destroyed home from scratch" pathway. Monotonic like the fields above and
+    # starts at "plans received" (stage 3); New permits never carry the earlier
+    # application/zoning milestones. The denominator is `destroyed_parcels`. See
+    # METHODOLOGY.md -> Rebuild progress.
+    rebuild_new_plans_received_parcels: int
+    rebuild_new_plans_approved_parcels: int
+    rebuild_new_permit_issued_parcels: int
+    rebuild_new_in_construction_parcels: int
+    rebuild_new_construction_completed_parcels: int
     lfl_count: int
     nlfl_count: int
     lfl_unknown_count: int
@@ -156,6 +168,20 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
         for num, key, _ in REBUILD_STAGES
     }
 
+    # New-construction funnel (the one the app publishes): same monotonic rule,
+    # but counts only new-building permits (`rebuild_new_stage`) on
+    # FIRESCOPE-destroyed parcels. Stages 1-2 are omitted — New permits never
+    # carry the application/zoning milestones, so the funnel starts at stage 3.
+    rebuild_new = {
+        key: sum(
+            1
+            for p in parcels
+            if p.rebuild_new_stage >= num and p.damage == DamageLevel.DESTROYED
+        )
+        for num, key, _ in REBUILD_STAGES
+        if num >= 3
+    }
+
     # "Unknown" only counts parcels that have a permit but no LFL signal —
     # parcels with no permit at all fall in the `none` bucket (not counted here).
     lfl = sum(1 for p in parcels if lfl_bucket(p) == "lfl")
@@ -198,6 +224,13 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
         rebuild_permit_issued_parcels=rebuild["permit_issued"],
         rebuild_in_construction_parcels=rebuild["in_construction"],
         rebuild_construction_completed_parcels=rebuild["construction_completed"],
+        rebuild_new_plans_received_parcels=rebuild_new["plans_received"],
+        rebuild_new_plans_approved_parcels=rebuild_new["plans_approved"],
+        rebuild_new_permit_issued_parcels=rebuild_new["permit_issued"],
+        rebuild_new_in_construction_parcels=rebuild_new["in_construction"],
+        rebuild_new_construction_completed_parcels=rebuild_new[
+            "construction_completed"
+        ],
         lfl_count=lfl,
         nlfl_count=nlfl,
         lfl_unknown_count=lfl_unknown,

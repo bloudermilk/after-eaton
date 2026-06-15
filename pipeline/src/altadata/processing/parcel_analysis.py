@@ -35,6 +35,13 @@ _EATON_DISASTER = "Eaton Fire (01-2025)"
 _EATON_DESC_RE = re.compile(r"eaton fire", re.I)
 _PRIMARY_PERMIT_WORKCLASSES = {"New", "Rebuild Project"}
 _PLAN_REBUILD_WORKCLASS = "Rebuild"
+# The new-building permit workclass. The published rebuild funnel tracks this
+# single pathway (see METHODOLOGY.md -> Rebuild progress): a "New" permit is the
+# actual building permit for a from-scratch structure — distinct from repairs,
+# alterations, and the "Rebuild Project" plan-tracking record that precedes it.
+# New permits never carry the application/zoning milestones (those live on the
+# preceding plan records), so a New-only furthest stage is always 0 or 3-7.
+_NEW_CONSTRUCTION_WORKCLASS = "New"
 
 
 @dataclass
@@ -105,6 +112,11 @@ class ParcelResult:
     # Furthest milestone reached (highest stage with a case count > 0; 0 = none
     # reached). Display-only — drives the map's stage color ramp. Not a count.
     rebuild_stage: int = 0
+    # Furthest milestone reached counting ONLY the parcel's new-building ("New"
+    # workclass) permits — the single pathway the published funnel tracks. New
+    # permits never carry the application/zoning milestones, so this is 0 or 3-7.
+    # Drives the "New construction milestones" funnel and its map stage ramp.
+    rebuild_new_stage: int = 0
 
 
 def analyze_parcel(joined: JoinedParcel) -> ParcelResult:
@@ -118,6 +130,7 @@ def analyze_parcel(joined: JoinedParcel) -> ParcelResult:
     pre = analyze_pre_fire(din)
     progress = _max_progress(fire_cases)
     milestones = _rebuild_case_counts(fire_cases)
+    new_milestones = _rebuild_case_counts(_new_construction_cases(fire_cases))
     primary = _select_primary_permit(fire_cases)
     post = _analyze_post_fire(primary)
     lfl_claimed, lfl_conflict = _resolve_lfl(fire_cases)
@@ -165,6 +178,7 @@ def analyze_parcel(joined: JoinedParcel) -> ParcelResult:
         rebuild_in_construction_cases=milestones["in_construction"],
         rebuild_construction_completed_cases=milestones["construction_completed"],
         rebuild_stage=_furthest_stage(milestones),
+        rebuild_new_stage=_furthest_stage(new_milestones),
     )
 
 
@@ -388,6 +402,16 @@ def _rebuild_case_counts(cases: list[EpicCase]) -> dict[str, int]:
             if raw.get(field):
                 counts[key] += 1
     return counts
+
+
+def _new_construction_cases(cases: list[EpicCase]) -> list[EpicCase]:
+    """Keep only the parcel's new-building permits (`WORKCLASS_NAME == "New"`).
+
+    This is the single pathway the published rebuild funnel tracks — see
+    `_NEW_CONSTRUCTION_WORKCLASS`. Repairs, alterations, and "Rebuild Project"
+    plan records are excluded.
+    """
+    return [c for c in cases if c.get("WORKCLASS_NAME") == _NEW_CONSTRUCTION_WORKCLASS]
 
 
 def _furthest_stage(milestone_counts: dict[str, int]) -> int:

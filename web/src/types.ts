@@ -11,10 +11,11 @@ export interface Summary {
   bsd_yellow_count: number;
   bsd_green_count: number;
   bsd_red_or_yellow_count: number;
-  // Rebuild-progress funnel: parcels at or beyond each milestone. Monotonic —
-  // a parcel is counted at every stage up to the furthest it reached, so the
-  // counts strictly decline (unlike LA County's non-monotonic case-level
-  // dashboard). See metrics.ts (rebuild_progress).
+  // Full rebuild funnel across ALL workclasses: parcels at or beyond each
+  // milestone. Monotonic — a parcel is counted at every stage up to the furthest
+  // it reached, so the counts strictly decline. Retained for future funnels
+  // (earlier stages / repair pathways); the app publishes the `rebuild_new_*`
+  // funnel below instead. See metrics.ts (rebuild_progress).
   rebuild_app_received_parcels: number;
   rebuild_zoning_cleared_parcels: number;
   rebuild_plans_received_parcels: number;
@@ -22,6 +23,15 @@ export interface Summary {
   rebuild_permit_issued_parcels: number;
   rebuild_in_construction_parcels: number;
   rebuild_construction_completed_parcels: number;
+  // New-construction milestones funnel — the one shown in the app. Parcels with a
+  // new-building ("New" workclass) permit AND a FIRESCOPE-destroyed structure,
+  // counted monotonically. Starts at "plans received" (New permits never carry
+  // the earlier application/zoning milestones). Denominator is destroyed_parcels.
+  rebuild_new_plans_received_parcels: number;
+  rebuild_new_plans_approved_parcels: number;
+  rebuild_new_permit_issued_parcels: number;
+  rebuild_new_in_construction_parcels: number;
+  rebuild_new_construction_completed_parcels: number;
   lfl_count: number;
   nlfl_count: number;
   lfl_unknown_count: number;
@@ -50,13 +60,17 @@ export interface ParcelProperties {
   adu_bucket: string;
   adds_sb9: boolean;
   adds_sb1123: boolean;
-  // County "Damaged/Destroyed Parcels" scope: Red- or Yellow-tagged in the
-  // post-fire Safety Assessment. Drives the funnel's "Damaged or destroyed"
-  // baseline filter (== summary.bsd_red_or_yellow_count).
+  // Red- or Yellow-tagged in the post-fire Safety Assessment (County
+  // "Damaged/Destroyed Parcels" scope). Retained for future use; the new-build
+  // funnel's baseline is now FIRESCOPE `damage == "destroyed"` (see below).
   bsd_red_or_yellow: boolean;
-  // Furthest rebuild milestone reached (0–7). Drives the stage color ramp and
-  // the "at or past stage N" map filter (expressed as `rebuild_stage >= N`).
+  // Furthest rebuild milestone reached across ALL workclasses (0–7). Retained
+  // for future funnels; the published funnel and map use rebuild_new_stage.
   rebuild_stage: number;
+  // Furthest NEW-building ("New" workclass) milestone reached (0, or 3–7). Drives
+  // the "New construction milestones" funnel's map stage ramp and its "currently
+  // at stage N" filter (with the `damage == "destroyed"` baseline).
+  rebuild_new_stage: number;
   // Raw counts/sqft + classifications read only by the per-parcel detail popup
   // (the buckets above drive the map coloring). Post-fire fields are null when
   // the parcel has no primary permit yet ("not yet filed").

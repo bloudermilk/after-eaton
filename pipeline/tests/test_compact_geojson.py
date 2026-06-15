@@ -42,6 +42,7 @@ def _result(
     adds_sb9: bool = False,
     adds_sb1123: bool = False,
     rebuild_stage: int = 0,
+    rebuild_new_stage: int = 0,
     bsd_status: BsdStatus = BsdStatus.RED,
 ) -> ParcelResult:
     return ParcelResult(
@@ -76,6 +77,7 @@ def _result(
         debris_cleared=None,
         dins_count=1,
         rebuild_stage=rebuild_stage,
+        rebuild_new_stage=rebuild_new_stage,
     )
 
 
@@ -170,6 +172,7 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "adds_sb1123",
         "bsd_red_or_yellow",
         "rebuild_stage",
+        "rebuild_new_stage",
         # Raw counts/sqft + classifications for the detail popup.
         "pre_sfr_count",
         "post_sfr_count",
@@ -191,8 +194,9 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "adds_sb1123": False,
         # _result defaults bsd_status to RED → in the damaged/destroyed scope.
         "bsd_red_or_yellow": True,
-        # _result defaults rebuild_stage to 0.
+        # _result defaults rebuild_stage and rebuild_new_stage to 0.
         "rebuild_stage": 0,
+        "rebuild_new_stage": 0,
         # _result fixes pre_sfr_count=1, pre_adu_count=0, post_*_count=None.
         "pre_sfr_count": 1,
         "post_sfr_count": None,
@@ -208,12 +212,13 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
 
 
 def test_compact_geojson_omits_per_stage_booleans(tmp_path: Path) -> None:
-    """The compact file carries only `rebuild_stage`; the old per-milestone
-    booleans (just `rebuild_stage >= N` denormalized) are dropped to keep the
-    web payload lean. The map derives "at or past stage N" from rebuild_stage."""
+    """The compact file carries only the two stage ints (`rebuild_stage` and
+    `rebuild_new_stage`); the old per-milestone booleans (just `>= N`
+    denormalized) are dropped to keep the web payload lean. The map derives
+    "at or past stage N" from the stage int."""
     pairs = [
         (
-            _result("p1", rebuild_progress_num=5, rebuild_stage=5),
+            _result("p1", rebuild_progress_num=5, rebuild_stage=5, rebuild_new_stage=5),
             JoinedParcel(
                 din=_dins("p1", _square(2.5, 5.0)), cases=[_case("p1", -118.1, 34.2)]
             ),
@@ -224,7 +229,9 @@ def test_compact_geojson_omits_per_stage_booleans(tmp_path: Path) -> None:
 
     props = json.loads(out.read_text())["features"][0]["properties"]
     assert props["rebuild_stage"] == 5
-    assert not any(k.startswith("rebuild_") and k != "rebuild_stage" for k in props)
+    assert props["rebuild_new_stage"] == 5
+    rebuild_keys = {k for k in props if k.startswith("rebuild_")}
+    assert rebuild_keys == {"rebuild_stage", "rebuild_new_stage"}
 
 
 def test_compact_geojson_rounds_coordinates(tmp_path: Path) -> None:

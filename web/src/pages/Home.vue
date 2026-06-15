@@ -31,9 +31,9 @@ function bucketsFor(metricId: string) {
 }
 
 const rebuildItems = computed(() => bucketsFor("rebuild_progress"));
-// The funnel's first bucket, "Damaged or destroyed" (bsd_red_or_yellow_count),
-// is the 100% baseline; every milestone's percentage is a share of it.
-const affectedDenominator = computed(() => summary.value?.bsd_red_or_yellow_count ?? 0);
+// The funnel's first bucket, "Destroyed structure" (destroyed_parcels), is the
+// 100% baseline; every new-construction milestone's percentage is a share of it.
+const affectedDenominator = computed(() => summary.value?.destroyed_parcels ?? 0);
 const sfrBuckets = computed(() => bucketsFor("sfr_size"));
 const lflItems = computed(() => bucketsFor("lfl"));
 const aduItems = computed(() => bucketsFor("adu"));
@@ -93,7 +93,7 @@ const dataAsOfLabel = computed(() => {
 
       <StatCard
         title="Rebuild progress"
-        subtitle="Permitting milestones reached"
+        subtitle="New construction milestones"
         interactive
         :active="isCardActive('rebuild_progress')"
         class="home__card"
@@ -103,28 +103,27 @@ const dataAsOfLabel = computed(() => {
         <template #info>
           <InfoButton title="Rebuild progress">
             <p>
-              <strong>Damaged or destroyed</strong> is the funnel's baseline (100%): Altadena
-              parcels the County Red- or Yellow-tagged in its post-fire Safety Assessment — the same
-              parcels LA County publishes as its "Damaged/Destroyed Parcels." Each milestone's
-              percentage is the share of those parcels that have reached it.
+              This funnel tracks <strong>new construction</strong> only — homes being rebuilt from
+              the ground up. It follows EPIC-LA's new-building permits and deliberately excludes
+              repairs, additions, retrofits, and retaining walls, so every milestone reflects a
+              from-scratch rebuild rather than work on a structure still standing.
             </p>
             <p>
-              The rows below count Altadena parcels that have reached a milestone in LA County's
-              rebuild permitting process — from the recovery application through completed
-              construction. A parcel counts toward a milestone if any of its fire cases reached it.
+              <strong>Destroyed structure</strong> is the baseline (100%): Altadena parcels the
+              County's post-fire assessment classed as destroyed (&gt;50% loss). Each milestone
+              below is the share of those parcels whose new-build permit has reached it. The funnel
+              starts at <strong>Plans received</strong> — a new-building permit doesn't exist during
+              the earlier application and zoning steps (those happen on a separate rebuild record),
+              and we'll cover them in a future funnel.
             </p>
             <p>
-              We report the funnel <strong>cumulatively</strong>: a parcel is counted at every stage
-              up to the furthest one it reached, so the counts decline at each later stage. A
-              parcel's map dot is colored by that furthest stage. This is a deliberate
-              simplification of LA County's own dashboard, which counts each milestone independently
-              and so is <em>not</em> strictly declining (a case can be recorded at a later stage
-              without an earlier one). Construction milestones (the last two) count new residential
-              work, per the source data.
+              We report it <strong>cumulatively</strong>: a parcel is counted at every stage up to
+              the furthest one its new-build permit reached, so the counts decline at each later
+              stage. A parcel's map dot is colored by that furthest stage.
             </p>
             <p>
-              <strong>On the map:</strong> by default every damaged parcel is shown, colored by the
-              furthest stage it has reached. Tapping a row narrows the map to the parcels
+              <strong>On the map:</strong> by default every destroyed parcel is shown, colored by
+              the furthest stage it has reached. Tapping a row narrows the map to the parcels
               <em>currently at</em> that stage — so they share one color, and fewer dots light up
               than the row's cumulative count.
             </p>

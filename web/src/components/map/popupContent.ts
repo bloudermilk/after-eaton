@@ -58,10 +58,15 @@ export function buildPopupContent(props: ParcelProperties): HTMLElement {
   const bsdLabel = BSD_LABELS[props.bsd_status];
   addRow(grid, "Damage", bsdLabel ? `${damageLabel} · ${bsdLabel}` : damageLabel);
 
-  // Rebuild stage label (0 → "Damaged or destroyed" … 7 → "Construction completed").
+  // New-construction funnel position (stages 3–7 → "Plans received" …
+  // "Construction completed"). Stage 0 means no new-building permit has reached
+  // plan check yet — the bucket-0 label ("Destroyed structure") is the funnel
+  // baseline, not a per-parcel stage, so we show a clearer phrase instead.
   const stageLabel =
-    getMetric("rebuild_progress")?.buckets.find((b) => b.stage === props.rebuild_stage)?.label ??
-    "—";
+    props.rebuild_new_stage > 0
+      ? (getMetric("rebuild_progress")?.buckets.find((b) => b.stage === props.rebuild_new_stage)
+          ?.label ?? "—")
+      : "No new-build permit yet";
   addRow(grid, "Rebuild stage", stageLabel);
 
   // Pre → post structure figures (post is null until a rebuild permit is filed).
