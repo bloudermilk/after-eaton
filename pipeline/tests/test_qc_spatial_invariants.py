@@ -83,6 +83,8 @@ def _zero_counts(total: int = 0) -> RegionCounts:
         adu_added_2_count=0,
         adu_added_3_plus_count=0,
         dwelling_rebuild_count=0,
+        rebuild_progress_not_started_count=0,
+        rebuild_progress_rebuilding_count=0,
     )
 
 

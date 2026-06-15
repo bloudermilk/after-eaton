@@ -48,6 +48,11 @@ export interface Summary {
   adu_added_2_count: number;
   adu_added_3_plus_count: number;
   dwelling_rebuild_count: number;
+  // "Rebuild progress" split of the County's Destroyed/Damaged population (BSD
+  // Red/Yellow == bsd_red_or_yellow_count): parcels with no active EPIC permit
+  // vs. any. Mutually exclusive; the two sum to bsd_red_or_yellow_count.
+  rebuild_progress_not_started_count: number;
+  rebuild_progress_rebuilding_count: number;
 }
 
 // Shape of parcels-compact.geojson — one Point per parcel carrying only the
@@ -59,6 +64,9 @@ export interface ParcelProperties {
   sfr_size_bucket: string;
   lfl_bucket: string;
   adu_bucket: string;
+  // Rebuild-progress split of the Destroyed/Damaged (BSD red/yellow) set:
+  // "rebuilding" | "not_started" | "none" (outside the population).
+  rebuild_progress_bucket: string;
   adds_sb9: boolean;
   adds_sb1123: boolean;
   // Red- or Yellow-tagged in the post-fire Safety Assessment (County

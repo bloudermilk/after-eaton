@@ -23,6 +23,7 @@ def _make(
     added_adu_count: int = 0,
     rebuild_stage: int = 0,
     rebuild_new_stage: int = 0,
+    fire_case_count: int = 0,
 ) -> ParcelResult:
     return ParcelResult(
         ain=ain,
@@ -57,6 +58,7 @@ def _make(
         dins_count=1,
         rebuild_stage=rebuild_stage,
         rebuild_new_stage=rebuild_new_stage,
+        fire_case_count=fire_case_count,
     )
 
 
@@ -70,6 +72,7 @@ def test_basic_counts() -> None:
             lfl_claimed=True,
             pre_sfr_sqft=1000,
             post_sfr_sqft=1300,  # +30% → larger_10_to_30 (boundary inclusive)
+            fire_case_count=2,  # RED + active permit → rebuilding
         ),
         _make(
             ain="2",
@@ -81,6 +84,7 @@ def test_basic_counts() -> None:
             post_sfr_sqft=900,  # 0.9 ratio → within_10 (boundary inclusive)
             adds_sb9=True,
             added_adu_count=2,
+            fire_case_count=1,  # YELLOW + active permit → rebuilding
         ),
         _make(
             ain="3",
@@ -90,6 +94,7 @@ def test_basic_counts() -> None:
             pre_sfr_sqft=1000,
             post_sfr_sqft=None,  # unknown bucket
             adds_sb1123=True,
+            fire_case_count=0,  # YELLOW + no active permit → not_started
         ),
         _make(
             ain="4",
@@ -122,6 +127,15 @@ def test_basic_counts() -> None:
     assert s.adu_added_1_count == 0
     assert s.adu_added_2_count == 1
     assert s.adu_added_3_plus_count == 0
+    # Rebuild progress: parcels 1 (RED) + 2 (YELLOW) have active permits;
+    # parcel 3 (YELLOW) has none; parcel 4 (GREEN) is outside the population.
+    # The two groups sum to bsd_red_or_yellow_count (3).
+    assert s.rebuild_progress_rebuilding_count == 2
+    assert s.rebuild_progress_not_started_count == 1
+    assert (
+        s.rebuild_progress_rebuilding_count + s.rebuild_progress_not_started_count
+        == s.bsd_red_or_yellow_count
+    )
     assert s.generated_at == "2026-04-27T00:00:00Z"
 
 

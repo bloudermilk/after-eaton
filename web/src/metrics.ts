@@ -9,7 +9,13 @@ import type { ExpressionSpecification, FilterSpecification } from "maplibre-gl";
 
 import type { Summary } from "@/types";
 
-export type MetricId = "new_construction" | "sfr_size" | "lfl" | "adu" | "density";
+export type MetricId =
+  | "rebuild_progress"
+  | "new_construction"
+  | "sfr_size"
+  | "lfl"
+  | "adu"
+  | "density";
 export type ChartKind = "vbars" | "donut" | "dist" | "bignumber" | "stagelist";
 
 /**
@@ -97,6 +103,32 @@ const densityValue = [
 ] as unknown as ExpressionSpecification;
 
 export const METRICS: MetricDef[] = [
+  {
+    id: "rebuild_progress",
+    title: "Rebuild progress",
+    subtitle: "Damaged or destroyed parcels",
+    chart: "vbars",
+    valueExpr: get("rebuild_progress_bucket"),
+    // The County's Destroyed/Damaged population (BSD Red/Yellow ==
+    // bsd_red_or_yellow_count) split by whether any active EPIC permit exists.
+    // The two buckets are mutually exclusive and sum to the population, so the
+    // card's percentages (share of the bucket total) read as 100%. Parcels
+    // outside the population resolve to "none" and stay hidden on the map.
+    buckets: [
+      {
+        key: "not_started",
+        label: "Not started",
+        color: C.alluvial,
+        summaryKey: "rebuild_progress_not_started_count",
+      },
+      {
+        key: "rebuilding",
+        label: "Rebuilding",
+        color: C.liveOakSoft,
+        summaryKey: "rebuild_progress_rebuilding_count",
+      },
+    ],
+  },
   {
     id: "new_construction",
     title: "New construction",

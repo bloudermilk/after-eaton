@@ -30,6 +30,14 @@ function bucketsFor(metricId: string) {
     .filter((b) => b.value > 0);
 }
 
+// Rebuild progress: the two groups partition the Destroyed/Damaged population,
+// so their sum is the denominator (== summary.bsd_red_or_yellow_count) and the
+// percentages read as a share of 100% — same pattern as Like-for-like below.
+const rebuildProgressBuckets = computed(() => bucketsFor("rebuild_progress"));
+const rebuildProgressDenominator = computed(() =>
+  rebuildProgressBuckets.value.reduce((sum, b) => sum + b.value, 0),
+);
+
 const rebuildItems = computed(() => bucketsFor("new_construction"));
 // The funnel's first bucket, "Plans received" (rebuild_new_plans_received_parcels),
 // is the 100% baseline; every later milestone's percentage is a share of it.
@@ -92,6 +100,42 @@ const dataAsOfLabel = computed(() => {
         </p>
         <p v-if="dataAsOfLabel" class="home__pill">Data as of {{ dataAsOfLabel }}</p>
       </div>
+
+      <StatCard
+        title="Rebuild progress"
+        subtitle="Damaged or destroyed parcels"
+        interactive
+        :active="isCardActive('rebuild_progress')"
+        class="home__card"
+        @click="centerCardOnTap"
+        @toggle="(additive) => toggleMetric('rebuild_progress', additive)"
+      >
+        <template #info>
+          <InfoButton title="Rebuild progress">
+            <p>
+              Of the parcels LA County tags as <strong>destroyed or damaged</strong> in its
+              post-fire Safety Assessment (Red- or Yellow-tagged), how many have started rebuilding?
+              This is the County's official "Destroyed/Damaged Parcels" population.
+            </p>
+            <p>
+              <strong>Rebuilding</strong> means the parcel has at least one active EPIC-LA permit in
+              any stage — from a freshly filed application through completed construction.
+              <strong>Not started</strong> means no active permit exists yet. Permits the county has
+              voided, cancelled, withdrawn, or otherwise marked dead don't count.
+            </p>
+            <p>
+              The two groups are mutually exclusive and together make up every destroyed/damaged
+              parcel, so the percentages are each group's share of that whole.
+            </p>
+          </InfoButton>
+        </template>
+        <VerticalBars
+          :buckets="rebuildProgressBuckets"
+          :denominator="rebuildProgressDenominator"
+          :selected-buckets="selectedBucketsFor('rebuild_progress')"
+          @select="(key, additive) => selectBucket('rebuild_progress', key, additive)"
+        />
+      </StatCard>
 
       <StatCard
         title="New construction"

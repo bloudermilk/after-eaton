@@ -7,7 +7,12 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from ..processing.aggregate import adu_bucket, lfl_bucket, sfr_size_bucket
+from ..processing.aggregate import (
+    adu_bucket,
+    lfl_bucket,
+    rebuild_progress_bucket,
+    sfr_size_bucket,
+)
 from ..processing.geometry import representative_point
 from ..processing.join import JoinedParcel
 from ..processing.normalize import BsdStatus
@@ -72,6 +77,10 @@ def _to_compact_feature(
         "sfr_size_bucket": sfr_size_bucket(result),
         "lfl_bucket": lfl_bucket(result),
         "adu_bucket": adu_bucket(result),
+        # Rebuild-progress split of the Destroyed/Damaged (BSD red/yellow) set:
+        # "rebuilding" / "not_started" / "none" (outside the population). Drives
+        # the "Rebuild progress" card + map filter (see metrics.ts).
+        "rebuild_progress_bucket": rebuild_progress_bucket(result),
         "adds_sb9": result.adds_sb9,
         "adds_sb1123": result.adds_sb1123,
         # County "Damaged/Destroyed Parcels" scope: Red- or Yellow-tagged in the

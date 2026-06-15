@@ -179,6 +179,23 @@ The published funnel keeps only the **new-building (`WORKCLASS_NAME = "New"`) pe
 
 ---
 
+## Rebuild progress
+
+Where the **New construction** funnel asks *how far* the active rebuilds have gotten, **Rebuild progress** asks the prior question: of the parcels that actually burned, how many have started rebuilding at all? It is a two-way split of a fixed population.
+
+**Population.** The denominator is LA County's **Destroyed/Damaged Parcels** — the parcels Red- or Yellow-tagged in the post-fire Safety Assessment (`bsd_status ∈ {red, yellow}`, == `bsd_red_or_yellow_count`). This is the BSD-tag population described in [Damage levels](#damage-levels-firescope-vs-bsd-tag), not the FIRESCOPE `damaged_parcels` set — it matches the County's headline figure and excludes lightly-affected lots that don't need a rebuild.
+
+**The split.** Within that population, each parcel falls in exactly one bucket:
+
+- **Rebuilding** — the parcel has **at least one active fire EPIC-LA case**, in any stage (from a freshly filed application through completed construction). "Active" means the case is not in a terminal-negative status (void, cancelled, withdrawn, revoked, denied, expired — see [Case status filter](#case-status-filter)); both `PermitManagement` and `PlanManagement` records count. This is the per-parcel `fire_case_count > 0` test, where `fire_case_count` is the number of the parcel's cases surviving the fire-relevance + active-status filters.
+- **Not started** — the parcel has **no** active fire case (`fire_case_count == 0`).
+
+The two buckets are mutually exclusive and sum to `bsd_red_or_yellow_count`, so the card shows each as a share of that whole. Parcels outside the population (no tag / Green-tagged) resolve to the `none` bucket and are neither counted nor shown on the map. The shared classifier `rebuild_progress_bucket` (in `processing/aggregate.py`) feeds both the `rebuild_progress_*_count` summary fields and the per-parcel `rebuild_progress_bucket` property on `parcels-compact.geojson`, so the card and map can't drift.
+
+This split is deliberately broader than the New construction funnel: a parcel only filing a repair or a "Rebuild Project" plan record (no "New" permit yet) still counts as **Rebuilding** here, even though it never enters the New-construction funnel.
+
+---
+
 ## Pre-fire structure inference (DINS slots)
 
 DINS encodes up to five structures per parcel via `DesignType{1..5}` and `SQFTmain{1..5}`. We classify each slot by the first two digits of `DesignType`:
@@ -421,7 +438,7 @@ The same parcel-level counts that roll up into `summary.json` also roll up per 2
 
 A failure of either invariant aborts the run with exit code 3 and **no release is published**.
 
-**Per-feature contract:** each tract/block-group `Feature` carries identifier fields (`ct20` + `label` for tracts; `bg20` + `ct20` + `label` for block groups) plus every numeric count from `summary.json` — `total_parcels`, `damaged_parcels`, `destroyed_parcels`, the `bsd_*_count` set, the rebuild-progress set, the LFL set, the SFR-size set, `sb9_count`, and `added_adu_count`. A tract/block-group that intersects the perimeter envelope but contains zero Altadena parcels still ships as a feature with all counts = 0, so the geographic frame is stable regardless of source drift.
+**Per-feature contract:** each tract/block-group `Feature` carries identifier fields (`ct20` + `label` for tracts; `bg20` + `ct20` + `label` for block groups) plus every numeric count from `summary.json` — `total_parcels`, `damaged_parcels`, `destroyed_parcels`, the `bsd_*_count` set, the rebuild funnel set, the `rebuild_progress_*_count` split, the LFL set, the SFR-size set, `sb9_count`, and `added_adu_count`. A tract/block-group that intersects the perimeter envelope but contains zero Altadena parcels still ships as a feature with all counts = 0, so the geographic frame is stable regardless of source drift.
 
 Source: `pipeline/src/altadata/processing/spatial_aggregate.py:aggregate_by_region`.
 
@@ -544,6 +561,8 @@ Burn-area-wide aggregate counts.
 | `rebuild_new_permit_issued_parcels` | `int` | Parcels with `rebuild_new_stage >= 5` (**Permits issued** or later). |
 | `rebuild_new_in_construction_parcels` | `int` | Parcels with `rebuild_new_stage >= 6` (**In construction** or later). |
 | `rebuild_new_construction_completed_parcels` | `int` | Parcels with `rebuild_new_stage >= 7` (**Construction completed**). Cumulative; strictly declines from stage 3 to stage 7. The denominator is `rebuild_new_plans_received_parcels`. See [New construction](#new-construction). |
+| `rebuild_progress_rebuilding_count` | `int` | Destroyed/Damaged (BSD Red/Yellow) parcels with any active fire EPIC case (`fire_case_count > 0`). See [Rebuild progress](#rebuild-progress). |
+| `rebuild_progress_not_started_count` | `int` | Destroyed/Damaged (BSD Red/Yellow) parcels with no active fire EPIC case. The two `rebuild_progress_*_count` fields are mutually exclusive and sum to `bsd_red_or_yellow_count`. See [Rebuild progress](#rebuild-progress). |
 | `lfl_count` | `int` | Parcels with `lfl_claimed = true`. |
 | `nlfl_count` | `int` | Parcels with `lfl_claimed = false`. |
 | `lfl_unknown_count` | `int` | Parcels with `lfl_claimed = null` *that have a permit* (i.e. `rebuild_progress_num` is not null). |

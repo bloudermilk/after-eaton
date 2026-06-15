@@ -79,6 +79,12 @@ class RegionCounts:
     # into post_adu_count via the LLM extraction (jadu→adu), so checking
     # post_sfr_count and post_adu_count covers all three types in practice.
     dwelling_rebuild_count: int
+    # "Rebuild progress" split of the County's Destroyed/Damaged population
+    # (BSD Red- or Yellow-tagged parcels — == bsd_red_or_yellow_count). A parcel
+    # is "rebuilding" if it has any active fire EPIC case, else "not started".
+    # The two are mutually exclusive and sum to bsd_red_or_yellow_count.
+    rebuild_progress_not_started_count: int
+    rebuild_progress_rebuilding_count: int
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -144,6 +150,20 @@ def adu_bucket(parcel: ParcelResult) -> str:
     return "none"
 
 
+def rebuild_progress_bucket(parcel: ParcelResult) -> str:
+    """Rebuild-progress split of the County's Destroyed/Damaged population.
+
+    The population is the BSD Red- or Yellow-tagged parcels (what LA County's
+    Recovery Map publishes as "Destroyed/Damaged Parcels"). Within it, a parcel
+    is `rebuilding` when it has any active fire EPIC case (a live permit in any
+    stage) and `not_started` when it has none. `none` = outside the population
+    (no/green safety tag) — not shown or selectable on the map.
+    """
+    if parcel.bsd_status not in (BsdStatus.RED, BsdStatus.YELLOW):
+        return "none"
+    return "rebuilding" if parcel.fire_case_count > 0 else "not_started"
+
+
 def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
     """Compute every published count field for a parcel set.
 
@@ -206,6 +226,14 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
         1 for p in parcels if (p.post_sfr_count or 0) > 0 or (p.post_adu_count or 0) > 0
     )
 
+    # Rebuild-progress split of the Destroyed/Damaged (BSD red/yellow) population.
+    rebuild_progress_not_started = sum(
+        1 for p in parcels if rebuild_progress_bucket(p) == "not_started"
+    )
+    rebuild_progress_rebuilding = sum(
+        1 for p in parcels if rebuild_progress_bucket(p) == "rebuilding"
+    )
+
     return RegionCounts(
         total_parcels=total,
         damaged_parcels=damaged,
@@ -243,6 +271,8 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
         adu_added_2_count=adu_added_2,
         adu_added_3_plus_count=adu_added_3_plus,
         dwelling_rebuild_count=dwelling_rebuild,
+        rebuild_progress_not_started_count=rebuild_progress_not_started,
+        rebuild_progress_rebuilding_count=rebuild_progress_rebuilding,
     )
 
 

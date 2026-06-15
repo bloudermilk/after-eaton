@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from altadata.outputs.geojson_writer import write_parcels_compact_geojson
-from altadata.processing.aggregate import adu_bucket, lfl_bucket, sfr_size_bucket
+from altadata.processing.aggregate import (
+    adu_bucket,
+    lfl_bucket,
+    rebuild_progress_bucket,
+    sfr_size_bucket,
+)
 from altadata.processing.geometry import representative_point
 from altadata.processing.join import JoinedParcel
 from altadata.processing.normalize import BsdStatus, DamageLevel
@@ -44,6 +49,7 @@ def _result(
     rebuild_stage: int = 0,
     rebuild_new_stage: int = 0,
     bsd_status: BsdStatus = BsdStatus.RED,
+    fire_case_count: int = 0,
 ) -> ParcelResult:
     return ParcelResult(
         ain=ain,
@@ -78,6 +84,7 @@ def _result(
         dins_count=1,
         rebuild_stage=rebuild_stage,
         rebuild_new_stage=rebuild_new_stage,
+        fire_case_count=fire_case_count,
     )
 
 
@@ -168,6 +175,7 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "sfr_size_bucket",
         "lfl_bucket",
         "adu_bucket",
+        "rebuild_progress_bucket",
         "adds_sb9",
         "adds_sb1123",
         "bsd_red_or_yellow",
@@ -190,6 +198,8 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "sfr_size_bucket": "larger_over_30",
         "lfl_bucket": "lfl",
         "adu_bucket": "added_2",
+        # _result defaults bsd_status=RED + fire_case_count=0 → not_started.
+        "rebuild_progress_bucket": "not_started",
         "adds_sb9": True,
         "adds_sb1123": False,
         # _result defaults bsd_status to RED → in the damaged/destroyed scope.
@@ -231,7 +241,13 @@ def test_compact_geojson_omits_per_stage_booleans(tmp_path: Path) -> None:
     assert props["rebuild_stage"] == 5
     assert props["rebuild_new_stage"] == 5
     rebuild_keys = {k for k in props if k.startswith("rebuild_")}
-    assert rebuild_keys == {"rebuild_stage", "rebuild_new_stage"}
+    # The two stage ints + the rebuild-progress bucket are the only `rebuild_`
+    # keys; the old per-milestone booleans stay dropped.
+    assert rebuild_keys == {
+        "rebuild_stage",
+        "rebuild_new_stage",
+        "rebuild_progress_bucket",
+    }
 
 
 def test_compact_geojson_rounds_coordinates(tmp_path: Path) -> None:
@@ -327,3 +343,32 @@ def test_adu_bucket_values() -> None:
     assert adu_bucket(_result("a", added_adu_count=1)) == "added_1"
     assert adu_bucket(_result("a", added_adu_count=2)) == "added_2"
     assert adu_bucket(_result("a", added_adu_count=5)) == "added_3_plus"
+
+
+def test_rebuild_progress_bucket_values() -> None:
+    # In the population (BSD Red/Yellow): split by whether any active permit exists.
+    assert (
+        rebuild_progress_bucket(
+            _result("a", bsd_status=BsdStatus.RED, fire_case_count=2)
+        )
+        == "rebuilding"
+    )
+    assert (
+        rebuild_progress_bucket(
+            _result("a", bsd_status=BsdStatus.YELLOW, fire_case_count=0)
+        )
+        == "not_started"
+    )
+    # Outside the population (no/green safety tag): neither group.
+    assert (
+        rebuild_progress_bucket(
+            _result("a", bsd_status=BsdStatus.GREEN, fire_case_count=3)
+        )
+        == "none"
+    )
+    assert (
+        rebuild_progress_bucket(
+            _result("a", bsd_status=BsdStatus.NONE, fire_case_count=0)
+        )
+        == "none"
+    )

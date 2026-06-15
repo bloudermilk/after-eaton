@@ -95,6 +95,11 @@ class ParcelResult:
     roe_status: str | None
     debris_cleared: str | None
     dins_count: int
+    # Count of the parcel's ACTIVE fire EPIC cases (post `filter_fire_cases` +
+    # `filter_active_cases`). > 0 means the parcel has at least one live permit
+    # in any stage; 0 means none have been filed. Drives the "Rebuild progress"
+    # not-started-vs-rebuilding split (see aggregate.rebuild_progress_bucket).
+    fire_case_count: int = 0
     # Independent rebuild-progress milestones (see normalize.REBUILD_STAGES).
     # Per-parcel CASE COUNTS: how many of the parcel's fire cases have reached
     # each milestone. Summing a field across all parcels reproduces LA County's
@@ -170,6 +175,7 @@ def analyze_parcel(joined: JoinedParcel) -> ParcelResult:
         roe_status=_to_str_or_none(din.get("ROE_Status")),
         debris_cleared=_to_str_or_none(din.get("Debris_Cleared")),
         dins_count=int(din.get("DINS_Count") or 0),
+        fire_case_count=len(fire_cases),
         rebuild_app_received_cases=milestones["app_received"],
         rebuild_zoning_cleared_cases=milestones["zoning_cleared"],
         rebuild_plans_received_cases=milestones["plans_received"],
