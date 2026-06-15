@@ -16,11 +16,10 @@ export const DATA_PATHS = {
 export const STALE_AFTER_MS = 96 * 60 * 60 * 1000; // 96 hours
 
 // Default map viewport: a hardcoded bounding box covering all Altadena
-// parcels, [[west, south], [east, north]] in WGS84 (matches the parcel
-// envelope produced by the pipeline). Used to fit the map on load.
+// parcels, [[west, south], [east, north]] in WGS84. Used to fit the map on load.
 export const ALTADENA_BOUNDS: [[number, number], [number, number]] = [
-  [-118.1644, 34.1676],
-  [-118.095, 34.2146],
+  [-118.172374, 34.173349],
+  [-118.096914, 34.214399],
 ];
 
 // Our warm, on-brand recolor of OpenFreeMap's positron basemap. Self-hosted
@@ -37,7 +36,7 @@ export const BASEMAP_STYLE_URL = `${baseUrl}map-style.json`;
 const EPICLA_SEARCH_BASE = "https://epicla.lacounty.gov/energov_prod/SelfService/#/search";
 
 export function epiclaSearchUrl(ain: string): string {
-  return `${EPICLA_SEARCH_BASE}?m=1&fm=1&ps=10&pn=1&em=true&st=${encodeURIComponent(ain)}`;
+  return `${EPICLA_SEARCH_BASE}?m=1&fm=1&ps=50&pn=1&em=true&st=${encodeURIComponent(ain)}`;
 }
 
 // County Assessor parcel-detail page, keyed by AIN in the URL path.

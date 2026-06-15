@@ -47,16 +47,24 @@ const { perimeter } = useFirePerimeter();
 
 onMounted(() => {
   if (!container.value) return;
+  // On mobile the cards overlay the bottom of the full-height map, so reserve the
+  // bottom half as padding to keep the fitted parcels in the unobscured top half.
+  const isMobile = window.matchMedia("(max-width: 767.98px)").matches;
+  const padding = isMobile
+    ? { top: 40, left: 40, right: 40, bottom: Math.round(container.value.clientHeight * 0.5) }
+    : 40;
   const m = new MaplibreMap({
     container: container.value,
     style: BASEMAP_STYLE_URL,
     bounds: ALTADENA_BOUNDS as LngLatBoundsLike,
-    fitBoundsOptions: { padding: 40 },
+    fitBoundsOptions: { padding },
     // Render our own AttributionControl so it starts collapsed.
     attributionControl: false,
   });
+  // Same corner stacks in insertion order, so add attribution first to sit above
+  // the zoom/compass controls in the top-right.
+  m.addControl(new AttributionControl({ compact: true }), "top-right");
   m.addControl(new NavigationControl({ showZoom: true, showCompass: true }), "top-right");
-  m.addControl(new AttributionControl({ compact: true }), "bottom-right");
   popup.value = new Popup({
     closeButton: true,
     closeOnClick: true,
@@ -196,13 +204,6 @@ watch(() => [props.focusedMetricId, props.filterSet], applySelection, { deep: tr
 /* maplibre injects controls/canvas; ensure they aren't clipped oddly. */
 .parcel-map :deep(.maplibregl-canvas) {
   outline: none;
-}
-/* On mobile the bottom cards overlay the map, so the attribution would be
-   obscured anyway — hide it entirely below the desktop breakpoint. */
-@media (max-width: 767.98px) {
-  .parcel-map :deep(.maplibregl-ctrl-attrib) {
-    display: none;
-  }
 }
 </style>
 

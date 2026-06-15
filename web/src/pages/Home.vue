@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 import StatCard from "@/components/StatCard.vue";
 import InfoButton from "@/components/InfoButton.vue";
@@ -10,10 +10,9 @@ import ParcelMap from "@/components/map/ParcelMap.vue";
 import { useDataset } from "@/composables/useDataset";
 import { useMapSelection } from "@/composables/useMapSelection";
 import { useParcels } from "@/composables/useParcels";
-import { DATA_PATHS, REPO_URL } from "@/constants";
 import { getMetric } from "@/metrics";
 
-const { summary, generatedAt } = useDataset();
+const { summary } = useDataset();
 const { parcels } = useParcels();
 const { filterSet, focusedMetricId, selectedBucketsFor, toggleMetric, selectBucket } =
   useMapSelection();
@@ -76,31 +75,46 @@ function centerCardOnTap(event: MouseEvent): void {
   });
 }
 
-const dataAsOfLabel = computed(() => {
-  if (!generatedAt.value) return null;
-  return generatedAt.value.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "America/Los_Angeles",
-    timeZoneName: "short",
-  });
+// On mobile the rail is a horizontal snap carousel. As the user swipes (or taps,
+// via centerCardOnTap above), focus the metric of whichever card lands in the
+// center so the map tracks the card you're looking at. Guarded to the mobile
+// breakpoint — the desktop rail is a vertical column where this makes no sense.
+const railEl = ref<HTMLElement | null>(null);
+let scrollSettleTimer: ReturnType<typeof setTimeout> | undefined;
+
+function selectCenteredCard(): void {
+  const rail = railEl.value;
+  if (!rail || !window.matchMedia("(max-width: 767.98px)").matches) return;
+  const railCenter = rail.scrollLeft + rail.clientWidth / 2;
+  let closestId: string | undefined;
+  let closestDist = Infinity;
+  for (const card of rail.querySelectorAll<HTMLElement>("[data-metric-id]")) {
+    const dist = Math.abs(card.offsetLeft + card.offsetWidth / 2 - railCenter);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closestId = card.dataset.metricId;
+    }
+  }
+  // Only switch on a genuine change of card — settling back on the focused card
+  // must not call toggleMetric, which would wipe its bucket selection.
+  if (closestId && closestId !== focusedMetricId.value) toggleMetric(closestId);
+}
+
+function onRailScroll(): void {
+  clearTimeout(scrollSettleTimer);
+  scrollSettleTimer = setTimeout(selectCenteredCard, 120);
+}
+
+onMounted(() => railEl.value?.addEventListener("scroll", onRailScroll, { passive: true }));
+onBeforeUnmount(() => {
+  railEl.value?.removeEventListener("scroll", onRailScroll);
+  clearTimeout(scrollSettleTimer);
 });
 </script>
 
 <template>
   <main v-if="summary" class="home">
-    <div class="home__rail">
-      <div class="home__intro">
-        <h1>Rebuilding Altadena</h1>
-        <p>
-          A living analysis of how Altadena is rebuilding after the Eaton Fire of 2025. Tap a metric
-          to map it; tap a bucket to isolate it. Shift-click to combine buckets and metrics.
-        </p>
-        <p v-if="dataAsOfLabel" class="home__pill">Data as of {{ dataAsOfLabel }}</p>
-      </div>
-
+    <div ref="railEl" class="home__rail">
       <StatCard
         title="Rebuild progress"
         subtitle="Damaged or destroyed parcels"
@@ -143,6 +157,7 @@ const dataAsOfLabel = computed(() => {
         interactive
         :active="isCardActive('new_construction')"
         class="home__card"
+        data-metric-id="new_construction"
         @click="centerCardOnTap"
         @toggle="(additive) => toggleMetric('new_construction', additive)"
       >
@@ -188,6 +203,7 @@ const dataAsOfLabel = computed(() => {
         interactive
         :active="isCardActive('sfr_size')"
         class="home__card"
+        data-metric-id="sfr_size"
         @click="centerCardOnTap"
         @toggle="(additive) => toggleMetric('sfr_size', additive)"
       >
@@ -219,6 +235,7 @@ const dataAsOfLabel = computed(() => {
         interactive
         :active="isCardActive('lfl')"
         class="home__card"
+        data-metric-id="lfl"
         @click="centerCardOnTap"
         @toggle="(additive) => toggleMetric('lfl', additive)"
       >
@@ -250,6 +267,7 @@ const dataAsOfLabel = computed(() => {
         interactive
         :active="isCardActive('adu')"
         class="home__card"
+        data-metric-id="adu"
         @click="centerCardOnTap"
         @toggle="(additive) => toggleMetric('adu', additive)"
       >
@@ -281,6 +299,7 @@ const dataAsOfLabel = computed(() => {
         interactive
         :active="isCardActive('density')"
         class="home__card"
+        data-metric-id="density"
         @click="centerCardOnTap"
         @toggle="(additive) => toggleMetric('density', additive)"
       >
@@ -320,18 +339,6 @@ const dataAsOfLabel = computed(() => {
           />
         </div>
       </StatCard>
-
-      <div class="home__meta">
-        <p class="home__about">
-          <strong>Altadata</strong> is free and open source. Built by Altadenans, for Altadena.
-          <a :href="REPO_URL" target="_blank" rel="noopener">View source on GitHub</a>.
-        </p>
-        <nav class="home__links" aria-label="Site">
-          <RouterLink to="/methodology">Methodology</RouterLink>
-          <RouterLink to="/quality-control">Quality Control</RouterLink>
-          <a :href="DATA_PATHS.parcelsCsv" download>Download parcels.csv</a>
-        </nav>
-      </div>
     </div>
 
     <div class="home__map">
@@ -384,12 +391,6 @@ const dataAsOfLabel = computed(() => {
   pointer-events: auto;
 }
 
-/* Intro + meta only show in the wide vertical rail; the narrow row is cards. */
-.home__intro,
-.home__meta {
-  display: none;
-}
-
 .home__map {
   flex: 1;
   min-height: 0;
@@ -429,21 +430,6 @@ const dataAsOfLabel = computed(() => {
     flex: 0 0 auto;
     width: 100%;
   }
-
-  .home__intro,
-  .home__meta {
-    display: block;
-  }
-
-  .home__intro h1 {
-    font-size: var(--fs-xl);
-    margin-bottom: var(--space-2);
-  }
-  .home__intro p {
-    color: var(--color-ink-muted);
-    font-size: var(--fs-sm);
-    margin: var(--space-2) 0;
-  }
 }
 
 /* Side-by-side state-bill counts (SB-9 / SB-1123) inside the density card. */
@@ -452,39 +438,5 @@ const dataAsOfLabel = computed(() => {
   flex-direction: row;
   gap: var(--space-4);
   width: 100%;
-}
-
-/* "Data as of" pill, now sitting just under the intro heading. */
-.home__pill {
-  display: inline-block;
-  background: var(--color-paper);
-  border: 1px solid var(--color-rule);
-  padding: var(--space-2) var(--space-3);
-  border-radius: 999px;
-  font-size: var(--fs-xs);
-  margin: var(--space-3) 0 0;
-}
-
-/* --- Rail meta (folded-in footer) --------------------------------------- */
-.home__meta {
-  margin-top: auto;
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-rule);
-}
-
-.home__about {
-  color: var(--color-ink-muted);
-  font-size: var(--fs-sm);
-  margin: 0 0 var(--space-3);
-}
-.home__about strong {
-  color: var(--color-ink);
-}
-
-.home__links {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  font-size: var(--fs-sm);
 }
 </style>

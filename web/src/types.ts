@@ -90,6 +90,8 @@ export interface ParcelProperties {
   post_sfr_sqft: number | null;
   pre_adu_count: number;
   post_adu_count: number | null;
+  pre_adu_sqft: number | null;
+  post_adu_sqft: number | null;
   added_adu_count: number;
   // FIRESCOPE %-loss bucket ("destroyed" | "major" | "minor" | "affected" |
   // "no_damage" | "no_data") and safety tag ("red" | "yellow" | "green" | "none").

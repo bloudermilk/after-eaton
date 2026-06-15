@@ -16,8 +16,8 @@ const route = useRoute();
 // don't gate it on dataset loading.
 const dataRequired = computed(() => route.name !== "methodology");
 
-// The home route is a full-viewport map split with no page scroll; it folds
-// the footer's links/as-of into the cards rail, so suppress the global footer.
+// The home route is a full-viewport map split with no page scroll, so suppress
+// the global footer. Its links/as-of live in the header's About modal instead.
 const isHome = computed(() => route.name === "home");
 
 // On home, pin the app shell to the viewport height so the cards rail and map
