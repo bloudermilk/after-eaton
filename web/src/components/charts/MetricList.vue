@@ -14,13 +14,14 @@ const props = withDefaults(
     items: Item[];
     // When provided, each row shows `value / denominator` as a percent.
     denominator?: number;
-    // Key of the currently selected bucket (dims the others).
-    selectedBucket?: string | null;
+    // Keys of the currently selected buckets (dims the rest).
+    selectedBuckets?: string[];
   }>(),
-  { denominator: undefined, selectedBucket: null },
+  { denominator: undefined, selectedBuckets: () => [] },
 );
 
-const emit = defineEmits<{ select: [key: string] }>();
+// `additive` carries the Shift modifier so the parent can build a filter set.
+const emit = defineEmits<{ select: [key: string, additive: boolean] }>();
 
 const showPct = computed(() => !!props.denominator && props.denominator > 0);
 
@@ -29,12 +30,16 @@ function formatPct(value: number): string {
   return `${((value / (props.denominator ?? 1)) * 100).toFixed(1)}%`;
 }
 
-function isDim(item: Item): boolean {
-  return props.selectedBucket != null && item.key !== props.selectedBucket;
+function isSelected(item: Item): boolean {
+  return item.key != null && props.selectedBuckets.includes(item.key);
 }
 
-function onSelect(item: Item): void {
-  if (item.key) emit("select", item.key);
+function isDim(item: Item): boolean {
+  return props.selectedBuckets.length > 0 && !isSelected(item);
+}
+
+function onSelect(item: Item, event: MouseEvent): void {
+  if (item.key) emit("select", item.key, event.shiftKey);
 }
 </script>
 
@@ -44,10 +49,10 @@ function onSelect(item: Item): void {
       <button
         type="button"
         class="mlist__row"
-        :class="{ 'is-dim': isDim(item), 'is-selected': item.key === selectedBucket }"
+        :class="{ 'is-dim': isDim(item), 'is-selected': isSelected(item) }"
         :disabled="!item.key"
-        :aria-pressed="item.key ? item.key === selectedBucket : undefined"
-        @click="onSelect(item)"
+        :aria-pressed="item.key ? isSelected(item) : undefined"
+        @click="onSelect(item, $event)"
       >
         <span
           class="mlist__swatch"

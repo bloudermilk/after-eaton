@@ -1,45 +1,98 @@
-import { readonly, ref } from "vue";
+import { computed, readonly, ref } from "vue";
 
-// The metric selected on first load. Exactly one metric is always active (see
-// toggleMetric), so this is also the metric a user can never fully deselect.
+// The metric focused on first load. One metric is always focused (it drives the
+// map's color ramp and which card is "primary"), so this is the metric a user
+// can never fully clear out of.
 const DEFAULT_METRIC_ID = "rebuild_progress";
 
-// Module-scoped so the cards rail and the map share one selection. Exactly one
-// metric is active at a time; within it, at most one bucket.
-const activeMetricId = ref<string | null>(DEFAULT_METRIC_ID);
-const activeBucketKey = ref<string | null>(null);
+// Module-scoped so the cards rail and the map share one selection.
+//
+// `filterSet` maps a metricId to the bucket keys selected within it. Buckets in
+// the same metric combine with OR; different metrics combine with AND — e.g.
+// `{ lfl: ["lfl"], rebuild_progress: ["plans_received", "plans_approved"] }`
+// means "Like-for-like AND (plans received OR plans approved)". An empty set is
+// the default "whole metric" view (every bucket of the focused metric shown).
+//
+// `focusedMetricId` is always set: it picks the color ramp and the primary card,
+// and is the metric a plain bucket/heading click resets to.
+const filterSet = ref<Record<string, string[]>>({});
+const focusedMetricId = ref<string>(DEFAULT_METRIC_ID);
 
-/**
- * Activate a metric. Exactly one metric is always selected, so tapping the
- * already-active card's header does not deselect it — it just clears any
- * bucket focus. Switching to a different metric clears the bucket too.
- */
-function toggleMetric(id: string): void {
-  if (activeMetricId.value === id) {
-    activeBucketKey.value = null;
-    return;
-  }
-  activeMetricId.value = id;
-  activeBucketKey.value = null;
+/** True once any metric has at least one bucket selected. */
+const isFilterSetActive = computed(() =>
+  Object.values(filterSet.value).some((keys) => keys.length > 0),
+);
+
+/** The selected bucket keys for a metric (empty array if none). */
+function selectedBucketsFor(metricId: string): string[] {
+  return filterSet.value[metricId] ?? [];
+}
+
+/** True when the whole set is exactly `{ [metricId]: [key] }` and nothing else. */
+function isOnlySelection(metricId: string, key: string): boolean {
+  const active = Object.entries(filterSet.value).filter(([, keys]) => keys.length > 0);
+  const only = active.length === 1 ? active[0] : undefined;
+  return only !== undefined && only[0] === metricId && only[1].length === 1 && only[1][0] === key;
 }
 
 /**
- * Select a bucket within a metric. Activates the metric if it wasn't already,
- * and toggles the bucket off if it was already the selected one.
+ * Select a bucket within a metric.
+ *
+ * Plain (additive=false): single-select, replacing the whole set with just this
+ * bucket — or clearing it if this bucket was already the lone selection (the
+ * familiar toggle-off back to the whole-metric view).
+ *
+ * Additive (Shift): toggle this bucket inside the set, building a multi-bucket /
+ * multi-metric filter. Removing a metric's last bucket drops it from the set.
  */
-function selectBucket(id: string, key: string): void {
-  if (activeMetricId.value !== id) {
-    activeMetricId.value = id;
-    activeBucketKey.value = key;
+function selectBucket(metricId: string, key: string, additive = false): void {
+  if (!additive) {
+    filterSet.value = isOnlySelection(metricId, key) ? {} : { [metricId]: [key] };
+    focusedMetricId.value = metricId;
     return;
   }
-  activeBucketKey.value = activeBucketKey.value === key ? null : key;
+
+  const current = filterSet.value[metricId] ?? [];
+  const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
+
+  const updated = { ...filterSet.value };
+  if (next.length > 0) {
+    updated[metricId] = next;
+  } else {
+    delete updated[metricId];
+  }
+  filterSet.value = updated;
+
+  // Keep the focus on the touched metric while it still has buckets; otherwise
+  // hand it to a metric still in the set (so its ramp colors the map when the
+  // set collapses to one metric), falling back to the touched metric when empty.
+  if (next.length > 0) {
+    focusedMetricId.value = metricId;
+  } else {
+    const remaining = Object.keys(updated);
+    focusedMetricId.value = remaining[0] ?? metricId;
+  }
+}
+
+/**
+ * Activate a metric from its card heading.
+ *
+ * Plain: clear the filter set and focus this metric (also the path that resets a
+ * multi-metric set back to a single metric). Shift while a set is active is a
+ * deliberate no-op — Shift only ever adds buckets, never metrics.
+ */
+function toggleMetric(metricId: string, additive = false): void {
+  if (additive && isFilterSetActive.value) return;
+  filterSet.value = {};
+  focusedMetricId.value = metricId;
 }
 
 export function useMapSelection() {
   return {
-    activeMetricId: readonly(activeMetricId),
-    activeBucketKey: readonly(activeBucketKey),
+    filterSet: readonly(filterSet),
+    focusedMetricId: readonly(focusedMetricId),
+    isFilterSetActive,
+    selectedBucketsFor,
     toggleMetric,
     selectBucket,
   };

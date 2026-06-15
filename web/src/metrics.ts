@@ -12,6 +12,12 @@ import type { Summary } from "@/types";
 export type MetricId = "rebuild_progress" | "sfr_size" | "lfl" | "adu" | "density";
 export type ChartKind = "vbars" | "donut" | "dist" | "bignumber" | "stagelist";
 
+/**
+ * Selected bucket keys per metric: OR within a metric, AND across metrics. Arrays
+ * are `readonly` so the selection ref (exposed via `readonly()`) flows in cleanly.
+ */
+export type FilterSet = Record<string, readonly string[]>;
+
 // Only the numeric (count) fields of Summary are valid card sources.
 type NumberKeys<T> = { [K in keyof T]: T[K] extends number ? K : never }[keyof T];
 export type SummaryCountKey = NumberKeys<Summary>;
@@ -66,6 +72,13 @@ const C = {
 
 /** Default dot color when no metric is active (also the match fallback). */
 export const NEUTRAL_DOT = C.alluvial;
+
+/**
+ * Highlight color for parcels matching a filter set that spans ≥2 metrics, where
+ * no single per-bucket ramp applies. The app accent, tying lit dots to the
+ * accent border on the participating cards.
+ */
+export const MATCH_DOT = C.poppy;
 
 // Tiny helpers so the literal expressions type-check cleanly against the
 // recursive style-spec tuple types.
@@ -252,13 +265,13 @@ export function getMetric(id: string | null): MetricDef | null {
 }
 
 /**
- * Which parcels are visible for the active metric. With no active bucket, every
- * one of the metric's buckets shows; with one selected, only that bucket.
- * Parcels outside the metric (e.g. `unknown`/`none` keys) are always hidden.
+ * Which parcels are visible for a metric. With no selected buckets, every one of
+ * the metric's buckets shows; with some selected, only those (they combine with
+ * OR). Parcels outside the metric (e.g. `unknown`/`none` keys) are always hidden.
  */
-export function metricFilter(metric: MetricDef, activeBucket: string | null): FilterSpecification {
-  const keys = activeBucket ? [activeBucket] : metric.buckets.map((b) => b.key);
-  return ["in", metric.valueExpr, ["literal", keys]] as unknown as FilterSpecification;
+export function metricFilter(metric: MetricDef, keys: readonly string[]): FilterSpecification {
+  const allowed = keys.length > 0 ? keys : metric.buckets.map((b) => b.key);
+  return ["in", metric.valueExpr, ["literal", allowed]] as unknown as FilterSpecification;
 }
 
 /** Color each visible parcel by its bucket, matching the card. */
@@ -287,23 +300,59 @@ export function metricColorStage(metric: MetricDef): ExpressionSpecification {
 
 /**
  * The damaged set (`bsd_red_or_yellow`) is the map's universe in stage mode.
- * With no active bucket, show every damaged parcel (colored by its current
- * stage); with one selected, narrow to the parcels currently AT that stage so
- * the lit dots share a single color. The stage-0 "Damaged or destroyed" row
- * therefore means "damaged but not yet started," not every parcel at stage 0.
+ * With no selected buckets, show every damaged parcel (colored by its current
+ * stage); with some selected, narrow to the parcels currently AT those stages
+ * (the stages combine with OR). The stage-0 "Damaged or destroyed" row therefore
+ * means "damaged but not yet started," not every parcel at stage 0.
  */
-export function metricFilterStage(
-  metric: MetricDef,
-  activeBucket: string | null,
-): FilterSpecification {
+export function metricFilterStage(metric: MetricDef, keys: readonly string[]): FilterSpecification {
   const damaged = ["==", ["get", "bsd_red_or_yellow"], true];
-  if (!activeBucket) {
+  if (keys.length === 0) {
     return damaged as unknown as FilterSpecification;
   }
-  const stage = metric.buckets.find((b) => b.key === activeBucket)?.stage ?? 0;
+  const stages = keys.map((k) => metric.buckets.find((b) => b.key === k)?.stage ?? 0);
   return [
     "all",
     damaged,
-    ["==", ["get", "rebuild_stage"], stage],
+    ["in", ["get", "rebuild_stage"], ["literal", stages]],
   ] as unknown as FilterSpecification;
+}
+
+/** A single metric's filter, dispatched on its map mode. */
+function metricSubfilter(metric: MetricDef, keys: readonly string[]): FilterSpecification {
+  return metric.mapMode === "stage" ? metricFilterStage(metric, keys) : metricFilter(metric, keys);
+}
+
+/**
+ * The combined map filter for a filter set. Each metric's selected buckets OR
+ * together (within `metricSubfilter`); the metrics then AND together. With no
+ * buckets selected, fall back to the focused metric's whole-metric view.
+ */
+export function buildMapFilter(
+  focusedMetric: MetricDef,
+  filterSet: FilterSet,
+): FilterSpecification {
+  const subs = Object.entries(filterSet)
+    .filter(([, keys]) => keys.length > 0)
+    .map(([id, keys]) => metricSubfilter(getMetric(id) ?? focusedMetric, keys));
+  const [first, ...rest] = subs;
+  if (first === undefined) return metricSubfilter(focusedMetric, []);
+  if (rest.length === 0) return first;
+  return ["all", first, ...rest] as unknown as FilterSpecification;
+}
+
+/**
+ * The dot color for a filter set. With 0–1 metrics in play we keep that metric's
+ * ramp (matching the card). Once the set spans ≥2 metrics no single ramp is
+ * meaningful, so every matching dot gets one neutral highlight color.
+ */
+export function buildMapColor(
+  focusedMetric: MetricDef,
+  filterSet: FilterSet,
+): ExpressionSpecification | string {
+  const activeMetricCount = Object.values(filterSet).filter((keys) => keys.length > 0).length;
+  if (activeMetricCount >= 2) return MATCH_DOT;
+  return focusedMetric.mapMode === "stage"
+    ? metricColorStage(focusedMetric)
+    : metricColor(focusedMetric);
 }

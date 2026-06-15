@@ -11,7 +11,8 @@ withDefaults(
   { subtitle: undefined, interactive: false, active: false },
 );
 
-const emit = defineEmits<{ toggle: [] }>();
+// `additive` carries the Shift modifier; the parent decides what it means.
+const emit = defineEmits<{ toggle: [additive: boolean] }>();
 </script>
 
 <template>
@@ -27,7 +28,7 @@ const emit = defineEmits<{ toggle: [] }>();
         class="stat-card__heading"
         :class="{ 'stat-card__heading--button': interactive }"
         :aria-pressed="interactive ? active : undefined"
-        @click="interactive && emit('toggle')"
+        @click="interactive && emit('toggle', $event.shiftKey)"
       >
         <h2 :id="`stat-${title.replace(/\\s+/g, '-')}`" class="stat-card__title">
           {{ title }}

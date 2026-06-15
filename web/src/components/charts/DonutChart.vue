@@ -9,13 +9,17 @@ interface Slice {
   color: string;
 }
 
-const props = defineProps<{
-  slices: Slice[];
-  // Key of the currently selected bucket (dims the others).
-  selectedBucket?: string | null;
-}>();
+const props = withDefaults(
+  defineProps<{
+    slices: Slice[];
+    // Keys of the currently selected buckets (dims the rest).
+    selectedBuckets?: string[];
+  }>(),
+  { selectedBuckets: () => [] },
+);
 
-const emit = defineEmits<{ select: [key: string] }>();
+// `additive` carries the Shift modifier so the parent can build a filter set.
+const emit = defineEmits<{ select: [key: string, additive: boolean] }>();
 
 const total = computed(() => props.slices.reduce((s, x) => s + x.value, 0));
 
@@ -27,12 +31,16 @@ interface Arc {
   pathD: string;
 }
 
-function isDim(s: { key?: string }): boolean {
-  return props.selectedBucket != null && s.key !== props.selectedBucket;
+function isSelected(s: { key?: string }): boolean {
+  return s.key != null && props.selectedBuckets.includes(s.key);
 }
 
-function onSelect(s: { key?: string }): void {
-  if (s.key) emit("select", s.key);
+function isDim(s: { key?: string }): boolean {
+  return props.selectedBuckets.length > 0 && !isSelected(s);
+}
+
+function onSelect(s: { key?: string }, event: MouseEvent): void {
+  if (s.key) emit("select", s.key, event.shiftKey);
 }
 
 // Render slices as concatenated SVG arc paths in a fixed 200x200 viewBox.
@@ -88,7 +96,7 @@ function pct(value: number): string {
           :fill="arc.color"
           class="donut__arc"
           :class="{ 'is-dim': isDim(arc), 'is-clickable': !!arc.key }"
-          @click="onSelect(arc)"
+          @click="onSelect(arc, $event)"
         />
       </g>
       <!-- inner cutout -->
@@ -99,10 +107,10 @@ function pct(value: number): string {
         <button
           type="button"
           class="donut__legend-btn"
-          :class="{ 'is-dim': isDim(s), 'is-selected': s.key === selectedBucket }"
+          :class="{ 'is-dim': isDim(s), 'is-selected': isSelected(s) }"
           :disabled="!s.key"
-          :aria-pressed="s.key ? s.key === selectedBucket : undefined"
-          @click="onSelect(s)"
+          :aria-pressed="s.key ? isSelected(s) : undefined"
+          @click="onSelect(s, $event)"
         >
           <span class="donut__swatch" :style="{ backgroundColor: s.color }" aria-hidden="true" />
           <span class="donut__label">{{ s.label }}</span>

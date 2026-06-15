@@ -9,16 +9,20 @@ interface Bucket {
   color?: string;
 }
 
-const props = defineProps<{
-  buckets: Bucket[];
-  // Universe size (e.g. all parcels actually rebuilding) — used as
-  // denominator when rendering each bar's percent label.
-  denominator?: number;
-  // Key of the currently selected bucket (dims the others).
-  selectedBucket?: string | null;
-}>();
+const props = withDefaults(
+  defineProps<{
+    buckets: Bucket[];
+    // Universe size (e.g. all parcels actually rebuilding) — used as
+    // denominator when rendering each bar's percent label.
+    denominator?: number;
+    // Keys of the currently selected buckets (dims the rest).
+    selectedBuckets?: string[];
+  }>(),
+  { denominator: undefined, selectedBuckets: () => [] },
+);
 
-const emit = defineEmits<{ select: [key: string] }>();
+// `additive` carries the Shift modifier so the parent can build a filter set.
+const emit = defineEmits<{ select: [key: string, additive: boolean] }>();
 
 const max = computed(() => Math.max(1, ...props.buckets.map((b) => b.value)));
 
@@ -27,12 +31,16 @@ function pctLabel(value: number): string {
   return `${((value / props.denominator) * 100).toFixed(1)}%`;
 }
 
-function isDim(b: Bucket): boolean {
-  return props.selectedBucket != null && b.key !== props.selectedBucket;
+function isSelected(b: Bucket): boolean {
+  return b.key != null && props.selectedBuckets.includes(b.key);
 }
 
-function onSelect(b: Bucket): void {
-  if (b.key) emit("select", b.key);
+function isDim(b: Bucket): boolean {
+  return props.selectedBuckets.length > 0 && !isSelected(b);
+}
+
+function onSelect(b: Bucket, event: MouseEvent): void {
+  if (b.key) emit("select", b.key, event.shiftKey);
 }
 </script>
 
@@ -48,11 +56,11 @@ function onSelect(b: Bucket): void {
       :key="bucket.label"
       type="button"
       class="vbars__col"
-      :class="{ 'is-dim': isDim(bucket), 'is-selected': bucket.key === selectedBucket }"
+      :class="{ 'is-dim': isDim(bucket), 'is-selected': isSelected(bucket) }"
       :disabled="!bucket.key"
-      :aria-pressed="bucket.key ? bucket.key === selectedBucket : undefined"
+      :aria-pressed="bucket.key ? isSelected(bucket) : undefined"
       :aria-label="`${bucket.label}: ${bucket.value.toLocaleString()}`"
-      @click="onSelect(bucket)"
+      @click="onSelect(bucket, $event)"
     >
       <span class="vbars__pct">{{ pctLabel(bucket.value) }}</span>
       <span class="vbars__bar-area">

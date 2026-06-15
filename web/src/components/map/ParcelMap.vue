@@ -13,22 +13,17 @@ import {
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 
 import { ALTADENA_BOUNDS, BASEMAP_STYLE_URL } from "@/constants";
-import {
-  getMetric,
-  metricColor,
-  metricColorStage,
-  metricFilter,
-  metricFilterStage,
-  NEUTRAL_DOT,
-} from "@/metrics";
+import { buildMapColor, buildMapFilter, type FilterSet, getMetric, NEUTRAL_DOT } from "@/metrics";
 import type { ParcelFeatureCollection, ParcelProperties } from "@/types";
 
 import { buildPopupContent } from "./popupContent";
 
 const props = defineProps<{
   geojson: ParcelFeatureCollection | null;
-  activeMetricId: string | null;
-  activeBucket: string | null;
+  // Drives the dot color ramp and the default (no-bucket) view.
+  focusedMetricId: string | null;
+  // metricId -> selected bucket keys (OR within a metric, AND across metrics).
+  filterSet: FilterSet;
 }>();
 
 const SOURCE_ID = "parcels";
@@ -124,32 +119,27 @@ function applyData(): void {
   applySelection();
 }
 
-/** Reflect the active metric/bucket selection into the layer's filter + color. */
+/** Reflect the focused metric + filter set into the layer's filter + color. */
 function applySelection(): void {
   const m = map.value;
   if (!m || !ready.value || !m.getLayer(LAYER_ID)) return;
   // A parcel hidden by the new filter shouldn't keep its popup open.
   popup.value?.remove();
-  const metric = getMetric(props.activeMetricId);
+  const metric = getMetric(props.focusedMetricId);
   if (!metric) {
     // Default state: every parcel, one neutral color.
     m.setFilter(LAYER_ID, null);
     m.setPaintProperty(LAYER_ID, "circle-color", NEUTRAL_DOT);
     return;
   }
-  if (metric.mapMode === "stage") {
-    // Color every damaged parcel by its current (furthest) stage; a selected
-    // milestone narrows the layer to the parcels exactly at that stage.
-    m.setFilter(LAYER_ID, metricFilterStage(metric, props.activeBucket));
-    m.setPaintProperty(LAYER_ID, "circle-color", metricColorStage(metric));
-    return;
-  }
-  m.setFilter(LAYER_ID, metricFilter(metric, props.activeBucket));
-  m.setPaintProperty(LAYER_ID, "circle-color", metricColor(metric));
+  // The filter ANDs each metric's buckets together; the color stays the focused
+  // metric's ramp until the set spans ≥2 metrics, then a single highlight.
+  m.setFilter(LAYER_ID, buildMapFilter(metric, props.filterSet));
+  m.setPaintProperty(LAYER_ID, "circle-color", buildMapColor(metric, props.filterSet));
 }
 
 watch(() => props.geojson, applyData);
-watch(() => [props.activeMetricId, props.activeBucket], applySelection);
+watch(() => [props.focusedMetricId, props.filterSet], applySelection, { deep: true });
 </script>
 
 <template>

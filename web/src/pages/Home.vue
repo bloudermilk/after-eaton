@@ -15,7 +15,8 @@ import { getMetric } from "@/metrics";
 
 const { summary, generatedAt } = useDataset();
 const { parcels } = useParcels();
-const { activeMetricId, activeBucketKey, toggleMetric, selectBucket } = useMapSelection();
+const { filterSet, focusedMetricId, selectedBucketsFor, toggleMetric, selectBucket } =
+  useMapSelection();
 
 // Build a metric's display buckets from summary.json counts, dropping empty
 // ones (a 0-count bucket has nothing to select on the map). Colors + keys come
@@ -47,10 +48,10 @@ const densityBuckets = getMetric("density")?.buckets ?? [];
 const sb9Color = densityBuckets.find((b) => b.key === "sb9")?.color;
 const sb1123Color = densityBuckets.find((b) => b.key === "sb1123")?.color;
 
-// The selected bucket for a card is only meaningful while that card's metric
-// is the active one.
-function selectedFor(metricId: string): string | null {
-  return activeMetricId.value === metricId ? activeBucketKey.value : null;
+// A card shows the accent border when it's the focused metric (its ramp colors
+// the map) or when it has any bucket in the filter set (a participating metric).
+function isCardActive(metricId: string): boolean {
+  return focusedMetricId.value === metricId || selectedBucketsFor(metricId).length > 0;
 }
 
 // Any tap on a card brings it fully into view (centered, matching the mobile
@@ -85,7 +86,7 @@ const dataAsOfLabel = computed(() => {
         <h1>Rebuilding Altadena</h1>
         <p>
           A living analysis of how Altadena is rebuilding after the Eaton Fire of 2025. Tap a metric
-          to map it; tap a bucket to isolate it.
+          to map it; tap a bucket to isolate it. Shift-click to combine buckets and metrics.
         </p>
         <p v-if="dataAsOfLabel" class="home__pill">Data as of {{ dataAsOfLabel }}</p>
       </div>
@@ -94,10 +95,10 @@ const dataAsOfLabel = computed(() => {
         title="Rebuild progress"
         subtitle="Permitting milestones reached"
         interactive
-        :active="activeMetricId === 'rebuild_progress'"
+        :active="isCardActive('rebuild_progress')"
         class="home__card"
         @click="centerCardOnTap"
-        @toggle="toggleMetric('rebuild_progress')"
+        @toggle="(additive) => toggleMetric('rebuild_progress', additive)"
       >
         <template #info>
           <InfoButton title="Rebuild progress">
@@ -132,8 +133,8 @@ const dataAsOfLabel = computed(() => {
         <MetricList
           :items="rebuildItems"
           :denominator="affectedDenominator"
-          :selected-bucket="selectedFor('rebuild_progress')"
-          @select="(key) => selectBucket('rebuild_progress', key)"
+          :selected-buckets="selectedBucketsFor('rebuild_progress')"
+          @select="(key, additive) => selectBucket('rebuild_progress', key, additive)"
         />
       </StatCard>
 
@@ -141,10 +142,10 @@ const dataAsOfLabel = computed(() => {
         title="Relative size"
         subtitle="Post-fire SFR vs. pre-fire SFR"
         interactive
-        :active="activeMetricId === 'sfr_size'"
+        :active="isCardActive('sfr_size')"
         class="home__card"
         @click="centerCardOnTap"
-        @toggle="toggleMetric('sfr_size')"
+        @toggle="(additive) => toggleMetric('sfr_size', additive)"
       >
         <template #info>
           <InfoButton title="Relative size">
@@ -163,8 +164,8 @@ const dataAsOfLabel = computed(() => {
         <VerticalBars
           :buckets="sfrBuckets"
           :denominator="dwellingDenominator"
-          :selected-bucket="selectedFor('sfr_size')"
-          @select="(key) => selectBucket('sfr_size', key)"
+          :selected-buckets="selectedBucketsFor('sfr_size')"
+          @select="(key, additive) => selectBucket('sfr_size', key, additive)"
         />
       </StatCard>
 
@@ -172,10 +173,10 @@ const dataAsOfLabel = computed(() => {
         title="Like-for-like"
         subtitle="Rebuild project type"
         interactive
-        :active="activeMetricId === 'lfl'"
+        :active="isCardActive('lfl')"
         class="home__card"
         @click="centerCardOnTap"
-        @toggle="toggleMetric('lfl')"
+        @toggle="(additive) => toggleMetric('lfl', additive)"
       >
         <template #info>
           <InfoButton title="Like-for-Like">
@@ -194,8 +195,8 @@ const dataAsOfLabel = computed(() => {
         <MetricList
           :items="lflItems"
           :denominator="lflDenominator"
-          :selected-bucket="selectedFor('lfl')"
-          @select="(key) => selectBucket('lfl', key)"
+          :selected-buckets="selectedBucketsFor('lfl')"
+          @select="(key, additive) => selectBucket('lfl', key, additive)"
         />
       </StatCard>
 
@@ -203,10 +204,10 @@ const dataAsOfLabel = computed(() => {
         title="Accessory dwellings"
         subtitle="ADUs added relative to pre-fire"
         interactive
-        :active="activeMetricId === 'adu'"
+        :active="isCardActive('adu')"
         class="home__card"
         @click="centerCardOnTap"
-        @toggle="toggleMetric('adu')"
+        @toggle="(additive) => toggleMetric('adu', additive)"
       >
         <template #info>
           <InfoButton title="Accessory dwellings">
@@ -225,8 +226,8 @@ const dataAsOfLabel = computed(() => {
         <MetricList
           :items="aduItems"
           :denominator="dwellingDenominator"
-          :selected-bucket="selectedFor('adu')"
-          @select="(key) => selectBucket('adu', key)"
+          :selected-buckets="selectedBucketsFor('adu')"
+          @select="(key, additive) => selectBucket('adu', key, additive)"
         />
       </StatCard>
 
@@ -234,10 +235,10 @@ const dataAsOfLabel = computed(() => {
         title="Density projects"
         subtitle="Parcels filing under state bills"
         interactive
-        :active="activeMetricId === 'density'"
+        :active="isCardActive('density')"
         class="home__card"
         @click="centerCardOnTap"
-        @toggle="toggleMetric('density')"
+        @toggle="(additive) => toggleMetric('density', additive)"
       >
         <template #info>
           <InfoButton title="Density projects">
@@ -262,16 +263,16 @@ const dataAsOfLabel = computed(() => {
             label="SB 9"
             bucket-key="sb9"
             :color="sb9Color"
-            :selected-bucket="selectedFor('density')"
-            @select="(key) => selectBucket('density', key)"
+            :selected-buckets="selectedBucketsFor('density')"
+            @select="(key, additive) => selectBucket('density', key, additive)"
           />
           <BigNumber
             :value="summary.sb1123_count"
             label="SB 1123"
             bucket-key="sb1123"
             :color="sb1123Color"
-            :selected-bucket="selectedFor('density')"
-            @select="(key) => selectBucket('density', key)"
+            :selected-buckets="selectedBucketsFor('density')"
+            @select="(key, additive) => selectBucket('density', key, additive)"
           />
         </div>
       </StatCard>
@@ -290,11 +291,7 @@ const dataAsOfLabel = computed(() => {
     </div>
 
     <div class="home__map">
-      <ParcelMap
-        :geojson="parcels"
-        :active-metric-id="activeMetricId"
-        :active-bucket="activeBucketKey"
-      />
+      <ParcelMap :geojson="parcels" :focused-metric-id="focusedMetricId" :filter-set="filterSet" />
     </div>
   </main>
 </template>
