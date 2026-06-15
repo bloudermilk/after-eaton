@@ -7,7 +7,7 @@
 // We build with createElement + textContent (never innerHTML) so the county
 // address string can't inject markup.
 
-import { epiclaSearchUrl } from "@/constants";
+import { assessorPortalUrl, epiclaSearchUrl } from "@/constants";
 import { getMetric } from "@/metrics";
 import type { ParcelProperties } from "@/types";
 
@@ -90,11 +90,18 @@ export function buildPopupContent(props: ParcelProperties): HTMLElement {
 
   // Always link out to the parcel's EPIC-LA search (works even with no case on
   // file — it just shows the empty result set for that AIN).
-  const link = el("a", "parcel-popup__link", "Look up on EPIC-LA ↗");
-  link.setAttribute("href", epiclaSearchUrl(props.ain));
-  link.setAttribute("target", "_blank");
-  link.setAttribute("rel", "noopener noreferrer");
-  root.append(link);
+  const epiclaLink = el("a", "parcel-popup__link", "Search EPIC-LA ↗");
+  epiclaLink.setAttribute("href", epiclaSearchUrl(props.ain));
+  epiclaLink.setAttribute("target", "_blank");
+  epiclaLink.setAttribute("rel", "noopener noreferrer");
+  root.append(epiclaLink);
+
+  // Assessor portal parcel-detail page for the same AIN.
+  const assessorLink = el("a", "parcel-popup__link", "Assessor Portal ↗");
+  assessorLink.setAttribute("href", assessorPortalUrl(props.ain));
+  assessorLink.setAttribute("target", "_blank");
+  assessorLink.setAttribute("rel", "noopener noreferrer");
+  root.append(assessorLink);
 
   return root;
 }

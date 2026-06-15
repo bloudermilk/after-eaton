@@ -39,3 +39,10 @@ const EPICLA_SEARCH_BASE = "https://epicla.lacounty.gov/energov_prod/SelfService
 export function epiclaSearchUrl(ain: string): string {
   return `${EPICLA_SEARCH_BASE}?m=1&fm=1&ps=10&pn=1&em=true&st=${encodeURIComponent(ain)}`;
 }
+
+// County Assessor parcel-detail page, keyed by AIN in the URL path.
+const ASSESSOR_PORTAL_BASE = "https://portal.assessor.lacounty.gov/parceldetail";
+
+export function assessorPortalUrl(ain: string): string {
+  return `${ASSESSOR_PORTAL_BASE}/${encodeURIComponent(ain)}`;
+}
