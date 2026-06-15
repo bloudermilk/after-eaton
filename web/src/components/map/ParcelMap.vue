@@ -207,7 +207,7 @@ watch(() => [props.focusedMetricId, props.filterSet], applySelection, { deep: tr
   font-variant-numeric: tabular-nums;
 }
 .parcel-popup__link {
-  display: inline-block;
+  display: block;
   margin-top: var(--space-3);
   font-size: var(--fs-xs);
   font-weight: 600;
