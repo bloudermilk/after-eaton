@@ -27,3 +27,14 @@ export const ALTADENA_BOUNDS: [[number, number], [number, number]] = [
 // and glyphs all stay on OpenFreeMap's free host. Rebuild with
 // `npm run map:build-style`; see scripts/build-map-style.mjs.
 export const BASEMAP_STYLE_URL = `${baseUrl}map-style.json`;
+
+// Public EPIC-LA (LA County Electronic Permitting & Inspections) Self-Service
+// search. We deep-link to the search results for a parcel's 10-digit AIN rather
+// than a specific case, so the link works for every parcel (and surfaces all of
+// its cases) without the pipeline carrying case numbers. The `st` (search term)
+// param is the AIN; the rest mirror the portal's default search query.
+const EPICLA_SEARCH_BASE = "https://epicla.lacounty.gov/energov_prod/SelfService/#/search";
+
+export function epiclaSearchUrl(ain: string): string {
+  return `${EPICLA_SEARCH_BASE}?m=1&fm=1&ps=10&pn=1&em=true&st=${encodeURIComponent(ain)}`;
+}

@@ -74,6 +74,21 @@ def _to_compact_feature(
         "bsd_red_or_yellow": result.bsd_status in (BsdStatus.RED, BsdStatus.YELLOW),
         # Furthest milestone reached, for the map's stage color ramp.
         "rebuild_stage": result.rebuild_stage,
+        # Raw pre/post counts + sqft and the damage/safety classifications power
+        # the per-parcel detail popup. The buckets above are for coloring; the
+        # popup shows the underlying numbers. Post-fire fields stay null (not 0)
+        # when no primary permit was found, so "not yet filed" reads correctly.
+        "pre_sfr_count": result.pre_sfr_count,
+        "post_sfr_count": result.post_sfr_count,
+        "pre_sfr_sqft": result.pre_sfr_sqft,
+        "post_sfr_sqft": result.post_sfr_sqft,
+        "pre_adu_count": result.pre_adu_count,
+        "post_adu_count": result.post_adu_count,
+        "added_adu_count": result.added_adu_count,
+        # FIRESCOPE %-loss bucket (destroyed/major/…) and full Red/Yellow/Green
+        # safety tag, for context in the popup.
+        "damage": result.damage.value,
+        "bsd_status": result.bsd_status.value,
     }
     # One boolean per rebuild milestone, set when the parcel's furthest stage is
     # at or beyond that milestone (monotonic — assumes earlier stages were

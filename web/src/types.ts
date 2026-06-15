@@ -65,6 +65,20 @@ export interface ParcelProperties {
   rebuild_in_construction: boolean;
   rebuild_construction_completed: boolean;
   rebuild_stage: number;
+  // Raw counts/sqft + classifications read only by the per-parcel detail popup
+  // (the buckets above drive the map coloring). Post-fire fields are null when
+  // the parcel has no primary permit yet ("not yet filed").
+  pre_sfr_count: number;
+  post_sfr_count: number | null;
+  pre_sfr_sqft: number | null;
+  post_sfr_sqft: number | null;
+  pre_adu_count: number;
+  post_adu_count: number | null;
+  added_adu_count: number;
+  // FIRESCOPE %-loss bucket ("destroyed" | "major" | "minor" | "affected" |
+  // "no_damage" | "no_data") and safety tag ("red" | "yellow" | "green" | "none").
+  damage: string;
+  bsd_status: string;
 }
 
 export interface ParcelFeature {

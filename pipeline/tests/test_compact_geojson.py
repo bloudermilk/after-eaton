@@ -177,6 +177,16 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "rebuild_in_construction",
         "rebuild_construction_completed",
         "rebuild_stage",
+        # Raw counts/sqft + classifications for the detail popup.
+        "pre_sfr_count",
+        "post_sfr_count",
+        "pre_sfr_sqft",
+        "post_sfr_sqft",
+        "pre_adu_count",
+        "post_adu_count",
+        "added_adu_count",
+        "damage",
+        "bsd_status",
     }
     assert feat["properties"] == {
         "ain": "p1",
@@ -197,6 +207,17 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "rebuild_in_construction": False,
         "rebuild_construction_completed": False,
         "rebuild_stage": 0,
+        # _result fixes pre_sfr_count=1, pre_adu_count=0, post_*_count=None.
+        "pre_sfr_count": 1,
+        "post_sfr_count": None,
+        "pre_sfr_sqft": 1000,
+        "post_sfr_sqft": 1500,
+        "pre_adu_count": 0,
+        "post_adu_count": None,
+        "added_adu_count": 2,
+        # _result fixes damage=DESTROYED and defaults bsd_status to RED.
+        "damage": "destroyed",
+        "bsd_status": "red",
     }
 
 
