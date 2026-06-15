@@ -5,7 +5,13 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ASSETS = ["summary.json", "qc-report.json", "parcels.csv", "parcels-compact.geojson"];
+const ASSETS = [
+  "summary.json",
+  "qc-report.json",
+  "parcels.csv",
+  "parcels-compact.geojson",
+  "fire-perimeter.geojson",
+];
 
 const here = dirname(fileURLToPath(import.meta.url));
 const srcDir = resolve(here, "..", "..", "data");

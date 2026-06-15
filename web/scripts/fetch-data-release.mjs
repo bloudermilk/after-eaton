@@ -23,6 +23,8 @@ const args = [
   "parcels.csv",
   "--pattern",
   "parcels-compact.geojson",
+  "--pattern",
+  "fire-perimeter.geojson",
   "--dir",
   dstDir,
   "--clobber",
