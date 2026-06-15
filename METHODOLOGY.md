@@ -60,7 +60,7 @@ EPIC-LA fields we read:
 | `DISASTER_TYPE` | Used to filter to Eaton Fire cases. |
 | `DESCRIPTION` | Free text — parsed for structure type, sqft, LFL claim. |
 | `PROJECT_NAME` | Free text — parsed for LFL claim as fallback to DESCRIPTION. |
-| `REBUILD_APP_RECEIVED`, `ZONING_REV_CLEARED`, `BUILD_PLAN_REV_PROC`, `BUILD_PLAN_APPROVED`, `BUILD_PERMIT_ISSUED`, `REBUILD_IN_CONS`, `CONS_COMPLETED` | The seven rebuild milestones — each holds the stage's label once reached, else `null`. The furthest one set on a parcel's new-building permits gives `rebuild_new_stage`, which drives the Rebuild-progress funnel (see [Rebuild progress](#rebuild-progress)). |
+| `REBUILD_APP_RECEIVED`, `ZONING_REV_CLEARED`, `BUILD_PLAN_REV_PROC`, `BUILD_PLAN_APPROVED`, `BUILD_PERMIT_ISSUED`, `REBUILD_IN_CONS`, `CONS_COMPLETED` | The seven rebuild milestones — each holds the stage's label once reached, else `null`. The furthest one set on a parcel's new-building permits gives `rebuild_new_stage`, which drives the New-construction funnel (see [New construction](#new-construction)). |
 | `REBUILD_PROGRESS_NUM` | Integer 1–7, the case's *latest* stage. Kept for the LFL "has a permit" test and QC only; **not** used for the funnel counts (the milestone fields above are). |
 | `REBUILD_PROGRESS` | Human-readable label corresponding to the number. |
 | `APPLY_DATE` | Epoch milliseconds. Used for recency ordering in LFL resolution. |
@@ -140,9 +140,9 @@ The Recovery Map's headline "5,936 Destroyed/Damaged Parcels" corresponds to `bs
 
 ---
 
-## Rebuild progress
+## New construction
 
-The headline **Rebuild progress** funnel tracks **new construction** — homes being rebuilt from the ground up on destroyed lots. It follows a single permit pathway through LA County's EPIC-LA permitting milestones and deliberately excludes repairs, additions, retrofits, and retaining walls.
+The headline **New construction** funnel tracks **new construction** — homes being rebuilt from the ground up. It follows a single permit pathway through LA County's EPIC-LA permitting milestones and deliberately excludes repairs, additions, retrofits, and retaining walls.
 
 ### The milestone model
 
@@ -160,20 +160,20 @@ EPIC-LA exposes seven independent rebuild milestones. Each field holds the stage
 
 The pipeline computes all seven for every parcel (see **Retained data** below), but the **published funnel uses only stages 3–7** of the new-construction pathway described next.
 
-### Scope: one pathway, on destroyed lots
+### Scope: one pathway
 
 A single rebuild generates several EPIC-LA records — a `PlanManagement` "Rebuild" plan record, a `PermitManagement` "Rebuild Project" record, and the actual `PermitManagement` **"New"** building permit — plus, on many parcels, separate permits for repairs, garages, retaining walls, or seismic retrofits. Counting milestones across *all* of them blends fundamentally different work into one funnel (it's why an early version reported 100 "construction completed" where the new-build count is far lower).
 
-The published funnel keeps only the **new-building (`WORKCLASS_NAME = "New"`) permits** — the from-scratch construction of a structure. Two consequences are baked into the data:
+The published funnel keeps only the **new-building (`WORKCLASS_NAME = "New"`) permits** — the from-scratch construction of a structure — across the whole fire area, regardless of the parcel's original damage level. Two consequences are baked into the data:
 
 - **It starts at "Plans received" (stage 3).** A "New" building permit does not exist during the application and zoning steps — those happen on the preceding plan / "Rebuild Project" records — so a New-only permit never carries stages 1–2. Those earlier steps, and the repair pathway, are left to future funnels.
 - **`rebuild_new_stage`** (0, or 3–7) is the furthest milestone reached by *any* of a parcel's New permits. It is separate from `rebuild_stage` (the all-workclass furthest stage, retained for future use), and it colors the parcel's dot on the map.
 
-**Destroyed structure (the funnel baseline).** The funnel is reported as a share of **Destroyed structure** — parcels whose FIRESCOPE `DAMAGE_1` assessment is "Destroyed (>50%)" (`destroyed_parcels`). The funnel counts are *scoped to this set*: ~99% of new construction is on destroyed lots, and restricting to it keeps the funnel a clean subset of its baseline, so the *card count == lit map dots == summary count* invariant holds exactly. The handful of new builds on merely damaged lots — new ADUs/garages beside a surviving home, a couple of commercial rebuilds — are intentionally excluded as not destroyed-home rebuilds.
+**Plans received (the funnel baseline).** The funnel is reported as a share of **Plans received** (`rebuild_new_plans_received_parcels`) — every parcel whose new-building permit has reached plan check (`rebuild_new_stage >= 3`), the funnel's 100% baseline. We count new builds regardless of the lot's FIRESCOPE damage classification: the overwhelming majority sit on destroyed lots, but a handful are new builds beside surviving homes (new ADUs/garages) or on heavily-but-not-fully-damaged lots, and the "New construction" funnel includes them all. Because both the card and the map key on `rebuild_new_stage` alone, the *card count == lit map dots == summary count* invariant holds exactly.
 
-**Monotonic (cumulative) counts.** The per-stage counts we publish (`rebuild_new_*_parcels` in `summary.json`) are *cumulative*: a parcel is counted at every stage up to and including its `rebuild_new_stage`. So `rebuild_new_permit_issued_parcels` counts every destroyed parcel with `rebuild_new_stage >= 5`. The counts **strictly decline** from stage 3 to stage 7 by construction, and on the map, selecting a row lights every destroyed parcel currently *at* that stage. Within a single permit's lifecycle the back-fill is sound — a finaled home was genuinely once under construction even where the `REBUILD_IN_CONS` field was never stamped (it's blank on most completed New permits).
+**Monotonic (cumulative) counts.** The per-stage counts we publish (`rebuild_new_*_parcels` in `summary.json`) are *cumulative*: a parcel is counted at every stage up to and including its `rebuild_new_stage`. So `rebuild_new_permit_issued_parcels` counts every parcel with `rebuild_new_stage >= 5`. The counts **strictly decline** from stage 3 to stage 7 by construction, and on the map, selecting a row lights every parcel currently *at* that stage. Within a single permit's lifecycle the back-fill is sound — a finaled home was genuinely once under construction even where the `REBUILD_IN_CONS` field was never stamped (it's blank on most completed New permits).
 
-**Relationship to LA County's dashboard.** LA County's published "Construction completed" count counts new-building permits *without* restricting to destroyed lots, and its earlier funnel rows count each milestone independently (a non-monotonic funnel). Our destroyed-scoped completed count is therefore lower. We do **not** claim our funnel matches the County's; LA County's own metric definitions also warn that the single `REBUILD_PROGRESS_NUM` (1–7, latest stage) must **not** be used for statistics, "because a case can still be counted as being in an earlier phase."
+**Relationship to LA County's dashboard.** LA County's published "Construction completed" count counts new-building permits, and its earlier funnel rows count each milestone independently (a non-monotonic funnel). We do **not** claim our funnel matches the County's; LA County's own metric definitions also warn that the single `REBUILD_PROGRESS_NUM` (1–7, latest stage) must **not** be used for statistics, "because a case can still be counted as being in an earlier phase."
 
 **Retained data (not surfaced in this funnel).** The pipeline still computes the full all-workclass funnel — `rebuild_stage` and the monotonic `rebuild_*_parcels` summary fields (every workclass, all seven stages) — plus a per-milestone **case count** per parcel (`rebuild_*_cases` on `parcels.geojson` / `parcels.csv`): how many of its fire cases reached each milestone, counted independently. Summing one `*_cases` field across all parcels reproduces LA County's non-monotonic, case-level total. These back future funnels (the earlier application/zoning stages, the repair pathway) and are not shown in the app today. `REBUILD_PROGRESS_NUM` is likewise retained per parcel as `rebuild_progress_num` (the max across the parcel's cases), used only for the Like-for-Like "has a permit" test and the QC completed-rebuilds sanity check — never for the funnel counts.
 
@@ -506,11 +506,11 @@ GeoJSON `FeatureCollection`. One `Feature` per Altadena parcel.
 | `sfr_size_comparison` | `string \| null` | `larger`/`identical`/`smaller` (±10 sqft tolerance), or `null` if either pre or post SFR sqft is missing. |
 | `adds_sb9` | `bool` | `true` if any fire-related case mentions SB-9 in `DESCRIPTION`, `PROJECT_NAME`, or `PROJECTNAME`. SB-9 is a parcel-level permitting pathway, not a structure type — see [`adds_sb9`](#adds_sb9). |
 | `added_adu_count` | `int` | `max(0, post_adu_count − pre_adu_count)`. Always 0 if no primary permit. |
-| `rebuild_progress_num` | `int \| null` | Max `REBUILD_PROGRESS_NUM` (1–7, the *latest* stage) across all fire cases. `null` = no fire case with a progress number. Used only for the LFL "has a permit" test and QC — **not** the rebuild funnel counts (see [Rebuild progress](#rebuild-progress)). |
+| `rebuild_progress_num` | `int \| null` | Max `REBUILD_PROGRESS_NUM` (1–7, the *latest* stage) across all fire cases. `null` = no fire case with a progress number. Used only for the LFL "has a permit" test and QC — **not** the rebuild funnel counts (see [New construction](#new-construction)). |
 | `rebuild_progress` | `string \| null` | Human-readable label corresponding to `rebuild_progress_num`. |
-| `rebuild_<stage>_cases` | `int` | One field per milestone (`rebuild_app_received_cases` … `rebuild_construction_completed_cases`): how many of the parcel's fire cases reached that milestone, counted independently. **Not surfaced in the app today** — retained so LA County's non-monotonic, case-level funnel stays reconstructable (summing a field across all parcels reproduces the County's case-level total). See [Rebuild progress](#rebuild-progress). |
-| `rebuild_stage` | `int` | Furthest milestone reached across **all** workclasses (0–7; 0 = none). Retained for future funnels; the published funnel and map use `rebuild_new_stage`. See [Rebuild progress](#rebuild-progress). |
-| `rebuild_new_stage` | `int` | Furthest milestone reached counting only new-building (`WORKCLASS_NAME = "New"`) permits (0, or 3–7; New permits never carry the application/zoning milestones). Drives the published new-construction funnel and the map's stage color ramp. See [Rebuild progress](#rebuild-progress). |
+| `rebuild_<stage>_cases` | `int` | One field per milestone (`rebuild_app_received_cases` … `rebuild_construction_completed_cases`): how many of the parcel's fire cases reached that milestone, counted independently. **Not surfaced in the app today** — retained so LA County's non-monotonic, case-level funnel stays reconstructable (summing a field across all parcels reproduces the County's case-level total). See [New construction](#new-construction). |
+| `rebuild_stage` | `int` | Furthest milestone reached across **all** workclasses (0–7; 0 = none). Retained for future funnels; the published funnel and map use `rebuild_new_stage`. See [New construction](#new-construction). |
+| `rebuild_new_stage` | `int` | Furthest milestone reached counting only new-building (`WORKCLASS_NAME = "New"`) permits (0, or 3–7; New permits never carry the application/zoning milestones). Drives the published new-construction funnel and the map's stage color ramp. See [New construction](#new-construction). |
 | `permit_status` | `string \| null` | DINS `Permit_Status`, pass-through. |
 | `roe_status` | `string \| null` | DINS `ROE_Status`, pass-through. |
 | `debris_cleared` | `string \| null` | DINS `Debris_Cleared`, pass-through. |
@@ -538,12 +538,12 @@ Burn-area-wide aggregate counts.
 | `bsd_yellow_count` | `int` | BSD-tag-based: parcels with `bsd_status = yellow`. |
 | `bsd_green_count` | `int` | BSD-tag-based: parcels with `bsd_status = green`. |
 | `bsd_red_or_yellow_count` | `int` | `bsd_red_count + bsd_yellow_count`. **This is the figure that matches the LA County Recovery Map's "Destroyed/Damaged Parcels".** |
-| `rebuild_app_received_parcels` … `rebuild_construction_completed_parcels` | `int` | All-workclass monotonic funnel: parcels with `rebuild_stage >= N` for each of the seven stages. **Retained for future funnels — not the funnel shown in the app** (that's the `rebuild_new_*` fields below). See [Rebuild progress](#rebuild-progress). |
-| `rebuild_new_plans_received_parcels` | `int` | **Published funnel.** Destroyed parcels (`damage == "destroyed"`) with `rebuild_new_stage >= 3` (**Plans received** or later). |
-| `rebuild_new_plans_approved_parcels` | `int` | Destroyed parcels with `rebuild_new_stage >= 4` (**Plans approved** or later). |
-| `rebuild_new_permit_issued_parcels` | `int` | Destroyed parcels with `rebuild_new_stage >= 5` (**Permits issued** or later). |
-| `rebuild_new_in_construction_parcels` | `int` | Destroyed parcels with `rebuild_new_stage >= 6` (**In construction** or later). |
-| `rebuild_new_construction_completed_parcels` | `int` | Destroyed parcels with `rebuild_new_stage >= 7` (**Construction completed**). Cumulative; strictly declines from stage 3 to stage 7. The denominator is `destroyed_parcels`. See [Rebuild progress](#rebuild-progress). |
+| `rebuild_app_received_parcels` … `rebuild_construction_completed_parcels` | `int` | All-workclass monotonic funnel: parcels with `rebuild_stage >= N` for each of the seven stages. **Retained for future funnels — not the funnel shown in the app** (that's the `rebuild_new_*` fields below). See [New construction](#new-construction). |
+| `rebuild_new_plans_received_parcels` | `int` | **Published funnel.** Parcels with `rebuild_new_stage >= 3` (**Plans received** or later) — the funnel's 100% baseline / denominator. |
+| `rebuild_new_plans_approved_parcels` | `int` | Parcels with `rebuild_new_stage >= 4` (**Plans approved** or later). |
+| `rebuild_new_permit_issued_parcels` | `int` | Parcels with `rebuild_new_stage >= 5` (**Permits issued** or later). |
+| `rebuild_new_in_construction_parcels` | `int` | Parcels with `rebuild_new_stage >= 6` (**In construction** or later). |
+| `rebuild_new_construction_completed_parcels` | `int` | Parcels with `rebuild_new_stage >= 7` (**Construction completed**). Cumulative; strictly declines from stage 3 to stage 7. The denominator is `rebuild_new_plans_received_parcels`. See [New construction](#new-construction). |
 | `lfl_count` | `int` | Parcels with `lfl_claimed = true`. |
 | `nlfl_count` | `int` | Parcels with `lfl_claimed = false`. |
 | `lfl_unknown_count` | `int` | Parcels with `lfl_claimed = null` *that have a permit* (i.e. `rebuild_progress_num` is not null). |

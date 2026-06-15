@@ -3,13 +3,13 @@ import { computed, readonly, ref } from "vue";
 // The metric focused on first load. One metric is always focused (it drives the
 // map's color ramp and which card is "primary"), so this is the metric a user
 // can never fully clear out of.
-const DEFAULT_METRIC_ID = "rebuild_progress";
+const DEFAULT_METRIC_ID = "new_construction";
 
 // Module-scoped so the cards rail and the map share one selection.
 //
 // `filterSet` maps a metricId to the bucket keys selected within it. Buckets in
 // the same metric combine with OR; different metrics combine with AND — e.g.
-// `{ lfl: ["lfl"], rebuild_progress: ["plans_received", "plans_approved"] }`
+// `{ lfl: ["lfl"], new_construction: ["plans_received", "plans_approved"] }`
 // means "Like-for-like AND (plans received OR plans approved)". An empty set is
 // the default "whole metric" view (every bucket of the focused metric shown).
 //

@@ -30,10 +30,12 @@ function bucketsFor(metricId: string) {
     .filter((b) => b.value > 0);
 }
 
-const rebuildItems = computed(() => bucketsFor("rebuild_progress"));
-// The funnel's first bucket, "Destroyed structure" (destroyed_parcels), is the
-// 100% baseline; every new-construction milestone's percentage is a share of it.
-const affectedDenominator = computed(() => summary.value?.destroyed_parcels ?? 0);
+const rebuildItems = computed(() => bucketsFor("new_construction"));
+// The funnel's first bucket, "Plans received" (rebuild_new_plans_received_parcels),
+// is the 100% baseline; every later milestone's percentage is a share of it.
+const plansReceivedDenominator = computed(
+  () => summary.value?.rebuild_new_plans_received_parcels ?? 0,
+);
 const sfrBuckets = computed(() => bucketsFor("sfr_size"));
 const lflItems = computed(() => bucketsFor("lfl"));
 const aduItems = computed(() => bucketsFor("adu"));
@@ -92,16 +94,16 @@ const dataAsOfLabel = computed(() => {
       </div>
 
       <StatCard
-        title="Rebuild progress"
-        subtitle="New construction milestones"
+        title="New construction"
+        subtitle="Rebuild milestones"
         interactive
-        :active="isCardActive('rebuild_progress')"
+        :active="isCardActive('new_construction')"
         class="home__card"
         @click="centerCardOnTap"
-        @toggle="(additive) => toggleMetric('rebuild_progress', additive)"
+        @toggle="(additive) => toggleMetric('new_construction', additive)"
       >
         <template #info>
-          <InfoButton title="Rebuild progress">
+          <InfoButton title="New construction">
             <p>
               This funnel tracks <strong>new construction</strong> only — homes being rebuilt from
               the ground up. It follows EPIC-LA's new-building permits and deliberately excludes
@@ -109,12 +111,11 @@ const dataAsOfLabel = computed(() => {
               from-scratch rebuild rather than work on a structure still standing.
             </p>
             <p>
-              <strong>Destroyed structure</strong> is the baseline (100%): Altadena parcels the
-              County's post-fire assessment classed as destroyed (&gt;50% loss). Each milestone
-              below is the share of those parcels whose new-build permit has reached it. The funnel
-              starts at <strong>Plans received</strong> — a new-building permit doesn't exist during
-              the earlier application and zoning steps (those happen on a separate rebuild record),
-              and we'll cover them in a future funnel.
+              <strong>Plans received</strong> is the baseline (100%): every parcel in the fire area
+              whose new-building permit has reached plan check. Each milestone below is the share of
+              those parcels that has progressed further. The funnel starts here — a new-building
+              permit doesn't exist during the earlier application and zoning steps (those happen on
+              a separate rebuild record), and we'll cover them in a future funnel.
             </p>
             <p>
               We report it <strong>cumulatively</strong>: a parcel is counted at every stage up to
@@ -122,18 +123,18 @@ const dataAsOfLabel = computed(() => {
               stage. A parcel's map dot is colored by that furthest stage.
             </p>
             <p>
-              <strong>On the map:</strong> by default every destroyed parcel is shown, colored by
-              the furthest stage it has reached. Tapping a row narrows the map to the parcels
-              <em>currently at</em> that stage — so they share one color, and fewer dots light up
-              than the row's cumulative count.
+              <strong>On the map:</strong> by default every parcel that reached Plans received is
+              shown, colored by the furthest stage it has reached. Tapping a row narrows the map to
+              the parcels <em>currently at</em> that stage — so they share one color, and fewer dots
+              light up than the row's cumulative count.
             </p>
           </InfoButton>
         </template>
         <MetricList
           :items="rebuildItems"
-          :denominator="affectedDenominator"
-          :selected-buckets="selectedBucketsFor('rebuild_progress')"
-          @select="(key, additive) => selectBucket('rebuild_progress', key, additive)"
+          :denominator="plansReceivedDenominator"
+          :selected-buckets="selectedBucketsFor('new_construction')"
+          @select="(key, additive) => selectBucket('new_construction', key, additive)"
         />
       </StatCard>
 

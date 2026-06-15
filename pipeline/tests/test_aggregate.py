@@ -185,32 +185,32 @@ def test_rebuild_funnel_counts_are_monotonic() -> None:
     assert all(counts[i] >= counts[i + 1] for i in range(len(counts) - 1))
 
 
-def test_new_construction_funnel_is_destroyed_scoped_and_monotonic() -> None:
-    """The published new-construction funnel counts only parcels with a
-    new-building permit (`rebuild_new_stage`) AND a FIRESCOPE-destroyed
-    structure, monotonically, starting at stage 3 (plans received)."""
+def test_new_construction_funnel_counts_all_new_builds_and_is_monotonic() -> None:
+    """The published new-construction funnel counts every parcel with a
+    new-building permit (`rebuild_new_stage`), regardless of original damage,
+    monotonically, starting at stage 3 (plans received — the 100% baseline)."""
     parcels = [
-        # Destroyed + reached each New stage — counted up to their stage.
+        # Reached each New stage — counted up to their stage.
         _make(ain="A", damage=DamageLevel.DESTROYED, rebuild_new_stage=7),
         _make(ain="B", damage=DamageLevel.DESTROYED, rebuild_new_stage=6),
         _make(ain="C", damage=DamageLevel.DESTROYED, rebuild_new_stage=3),
-        # New construction on a NON-destroyed lot — excluded from every row,
-        # even though it reached "completed".
+        # New construction on a NON-destroyed lot — now counted like any other.
         _make(ain="D", damage=DamageLevel.MAJOR, rebuild_new_stage=7),
-        # Destroyed but no New permit — in the baseline, not in any funnel row.
+        # No New permit — not in any funnel row (but still in destroyed_parcels).
         _make(ain="E", damage=DamageLevel.DESTROYED, rebuild_new_stage=0),
     ]
     s = aggregate_burn_area(parcels, "2026-04-27T00:00:00Z")
 
     counts = [
-        s.rebuild_new_plans_received_parcels,  # stage >= 3: A, B, C
-        s.rebuild_new_plans_approved_parcels,  # stage >= 4: A, B
-        s.rebuild_new_permit_issued_parcels,  # stage >= 5: A, B
-        s.rebuild_new_in_construction_parcels,  # stage >= 6: A, B
-        s.rebuild_new_construction_completed_parcels,  # stage >= 7: A
+        s.rebuild_new_plans_received_parcels,  # stage >= 3: A, B, C, D
+        s.rebuild_new_plans_approved_parcels,  # stage >= 4: A, B, D
+        s.rebuild_new_permit_issued_parcels,  # stage >= 5: A, B, D
+        s.rebuild_new_in_construction_parcels,  # stage >= 6: A, B, D
+        s.rebuild_new_construction_completed_parcels,  # stage >= 7: A, D
     ]
-    assert counts == [3, 2, 2, 2, 1]
-    # The non-destroyed completion (D) never appears; baseline holds all destroyed.
+    assert counts == [4, 3, 3, 3, 2]
+    # The non-destroyed completion (D) is now counted; destroyed_parcels is the
+    # damage tally, unaffected by the funnel scope change.
     assert s.destroyed_parcels == 4
     assert all(counts[i] >= counts[i + 1] for i in range(len(counts) - 1))
 

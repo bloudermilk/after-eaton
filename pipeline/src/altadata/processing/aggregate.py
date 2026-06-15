@@ -42,12 +42,12 @@ class RegionCounts:
     rebuild_in_construction_parcels: int
     rebuild_construction_completed_parcels: int
     # New-construction milestones funnel — the one published in the app. Counts
-    # only parcels with a new-building ("New" workclass) permit (`rebuild_new_stage`)
-    # AND a FIRESCOPE-destroyed structure, so it tracks the single "rebuild a
-    # destroyed home from scratch" pathway. Monotonic like the fields above and
-    # starts at "plans received" (stage 3); New permits never carry the earlier
-    # application/zoning milestones. The denominator is `destroyed_parcels`. See
-    # METHODOLOGY.md -> Rebuild progress.
+    # every parcel with a new-building ("New" workclass) permit (`rebuild_new_stage`),
+    # regardless of original damage level, so it tracks new-from-scratch building
+    # across the fire area. Monotonic like the fields above and starts at "plans
+    # received" (stage 3); New permits never carry the earlier application/zoning
+    # milestones. The denominator is `rebuild_new_plans_received_parcels` (Plans
+    # received is the 100% baseline). See METHODOLOGY.md -> New construction.
     rebuild_new_plans_received_parcels: int
     rebuild_new_plans_approved_parcels: int
     rebuild_new_permit_issued_parcels: int
@@ -169,15 +169,12 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
     }
 
     # New-construction funnel (the one the app publishes): same monotonic rule,
-    # but counts only new-building permits (`rebuild_new_stage`) on
-    # FIRESCOPE-destroyed parcels. Stages 1-2 are omitted — New permits never
-    # carry the application/zoning milestones, so the funnel starts at stage 3.
+    # counting every new-building permit (`rebuild_new_stage`) regardless of the
+    # parcel's original damage level. Stages 1-2 are omitted — New permits never
+    # carry the application/zoning milestones, so the funnel starts at stage 3,
+    # which ("plans received") is the funnel's 100% baseline.
     rebuild_new = {
-        key: sum(
-            1
-            for p in parcels
-            if p.rebuild_new_stage >= num and p.damage == DamageLevel.DESTROYED
-        )
+        key: sum(1 for p in parcels if p.rebuild_new_stage >= num)
         for num, key, _ in REBUILD_STAGES
         if num >= 3
     }

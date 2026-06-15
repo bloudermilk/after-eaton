@@ -60,11 +60,11 @@ export function buildPopupContent(props: ParcelProperties): HTMLElement {
 
   // New-construction funnel position (stages 3–7 → "Plans received" …
   // "Construction completed"). Stage 0 means no new-building permit has reached
-  // plan check yet — the bucket-0 label ("Destroyed structure") is the funnel
-  // baseline, not a per-parcel stage, so we show a clearer phrase instead.
+  // plan check yet — the funnel's first row is "Plans received" (stage 3), so
+  // there's no bucket for stage 0 and we show a clearer phrase instead.
   const stageLabel =
     props.rebuild_new_stage > 0
-      ? (getMetric("rebuild_progress")?.buckets.find((b) => b.stage === props.rebuild_new_stage)
+      ? (getMetric("new_construction")?.buckets.find((b) => b.stage === props.rebuild_new_stage)
           ?.label ?? "—")
       : "No new-build permit yet";
   addRow(grid, "Rebuild stage", stageLabel);
