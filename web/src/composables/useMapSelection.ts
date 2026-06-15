@@ -1,9 +1,12 @@
 import { computed, readonly, ref } from "vue";
 
+import { METRICS } from "../metrics";
+
 // The metric focused on first load. One metric is always focused (it drives the
 // map's color ramp and which card is "primary"), so this is the metric a user
-// can never fully clear out of.
-const DEFAULT_METRIC_ID = "new_construction";
+// can never fully clear out of. Always the first metric in the list, so the
+// default tracks the rail's ordering.
+const DEFAULT_METRIC_ID = METRICS[0].id;
 
 // Module-scoped so the cards rail and the map share one selection.
 //
