@@ -21,6 +21,7 @@ from .normalize import (
     REBUILD_STAGES,
     BsdStatus,
     DamageLevel,
+    filter_active_cases,
     normalize_bsd,
     normalize_damage,
     rebuild_progress_label,
@@ -108,7 +109,11 @@ class ParcelResult:
 
 def analyze_parcel(joined: JoinedParcel) -> ParcelResult:
     din = joined.din
-    fire_cases = filter_fire_cases(joined.cases)
+    # Drop terminal-negative cases (voided/cancelled/etc.) so no count rests on
+    # a record the county has marked dead. The CLI already filters globally; the
+    # call here is idempotent and keeps analyze_parcel correct in isolation
+    # (unit tests / QA fixtures pass raw cases).
+    fire_cases = filter_active_cases(filter_fire_cases(joined.cases))
 
     pre = analyze_pre_fire(din)
     progress = _max_progress(fire_cases)

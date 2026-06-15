@@ -23,6 +23,10 @@ class QcReport:
     thresholds: list[ThresholdCheck]
     # Informational metrics — included in qc-report.json but not gated.
     extraction_comparison: dict[str, Any] = field(default_factory=dict)
+    # Per-status case counts + classification (active/inactive/unrecognized),
+    # taken over fire cases before the inactive filter. Audits what was dropped
+    # and surfaces any unclassified status. See qc/status.py.
+    status_distribution: dict[str, Any] = field(default_factory=dict)
 
     @property
     def passed(self) -> bool:
@@ -39,6 +43,8 @@ def write_report(report: QcReport, out_path: Path) -> None:
     }
     if report.extraction_comparison:
         payload["extraction_comparison"] = report.extraction_comparison
+    if report.status_distribution:
+        payload["status_distribution"] = report.status_distribution
     out_path.write_text(json.dumps(payload, indent=2))
 
 

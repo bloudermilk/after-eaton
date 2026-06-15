@@ -1,9 +1,11 @@
 """Normalization helpers: damage levels, BSD safety-assessment tags,
-rebuild progress."""
+rebuild progress, and EPIC-LA case-status classification."""
 
 from __future__ import annotations
 
 from enum import StrEnum
+
+from ..sources.schemas import EpicCase
 
 
 class DamageLevel(StrEnum):
@@ -101,3 +103,83 @@ REBUILD_STAGES: tuple[tuple[int, str, str], ...] = (
     (6, "in_construction", "REBUILD_IN_CONS"),
     (7, "construction_completed", "CONS_COMPLETED"),
 )
+
+
+# EPIC-LA case `STATUS` classification.
+#
+# We must not assert a future rebuild state from a record the county has marked
+# dead. Cases whose status is terminal-negative (voided, cancelled, withdrawn,
+# revoked, denied, rejected, expired) are dropped from every count; pending /
+# submitted / approved / issued / completed cases are kept (they happened, or
+# still might). This is a DENYLIST: anything not explicitly inactive is counted,
+# including null/unknown statuses ("might happen").
+#
+# `ACTIVE_STATUSES` is the allowlist of recognized live statuses observed across
+# both EPIC-LA sources. It is kept exact (not used for filtering) so that a NEW
+# county status — in neither set — trips the `unrecognized_status_count` QC gate
+# (see qc/aggregate.py) and forces a human to classify it before it skews counts.
+# Both sets hold normalized values: lowercased and outer-trimmed.
+INACTIVE_STATUSES: frozenset[str] = frozenset(
+    {
+        "void",
+        "voided",
+        "cancelled",
+        "canceled",
+        "withdrawn",
+        "revoked",
+        "denied",
+        "rejected",
+        "expired",
+    }
+)
+
+ACTIVE_STATUSES: frozenset[str] = frozenset(
+    {
+        "issued",
+        "open",
+        "waiting for applicant",
+        "in review",
+        "review",
+        "approved pending clearances",
+        "approved ready for permit",
+        "approved",
+        "zoning cleared",
+        "hold",
+        "on hold",
+        "new",
+        "new - online",
+        "finaled",
+        "completed",
+        "accepted",
+        "recorded",
+    }
+)
+
+
+def _normalize_status(status: str | None) -> str:
+    """Lowercase and outer-trim a raw STATUS string; None/missing -> ""."""
+    return (status or "").strip().lower()
+
+
+def is_active_status(status: str | None) -> bool:
+    """True unless the status is explicitly terminal-negative.
+
+    Null/empty/unknown statuses return True (counted) — the denylist only
+    excludes values it positively recognizes as dead.
+    """
+    return _normalize_status(status) not in INACTIVE_STATUSES
+
+
+def is_recognized_status(status: str | None) -> bool:
+    """True if the status is null/empty (expected) or in a known set.
+
+    Returns False for any value we have never classified — the signal the
+    `unrecognized_status_count` QC gate counts.
+    """
+    norm = _normalize_status(status)
+    return norm == "" or norm in ACTIVE_STATUSES or norm in INACTIVE_STATUSES
+
+
+def filter_active_cases(cases: list[EpicCase]) -> list[EpicCase]:
+    """Drop cases whose STATUS is terminal-negative (see INACTIVE_STATUSES)."""
+    return [c for c in cases if is_active_status(c.get("STATUS"))]

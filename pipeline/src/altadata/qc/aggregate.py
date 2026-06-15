@@ -11,6 +11,7 @@ from ..processing.join import JoinedParcel
 from ..processing.parcel_analysis import ParcelResult
 from ..processing.spatial_aggregate import SpatialAggregation
 from .per_record import RecordWarning
+from .status import StatusSummary
 
 # Tunable thresholds — keep names stable for ops review. These are the
 # original PLAN.md values; they're hard CI gates, not aspirational targets.
@@ -18,6 +19,10 @@ DESCRIPTION_PARSE_MIN_RATE = 0.90
 SFR_SQFT_EXTRACTION_MIN_RATE = 0.85
 WARNING_RATE_MAX = 0.05
 MIN_COMPLETED_REBUILDS = 1
+# Max fire cases allowed to carry a STATUS we've never classified (neither
+# active nor inactive). Breaching this forces a human to categorize the new
+# value before it silently skews counts. See processing/normalize.py.
+UNRECOGNIZED_STATUS_MAX = 5
 
 _EATON_DESC_RE = re.compile(r"eaton fire", re.I)
 # Independent of the parser regexes, on purpose: a parser regression can't
@@ -42,6 +47,7 @@ def check_thresholds(
     *,
     tract_aggregation: SpatialAggregation | None = None,
     block_group_aggregation: SpatialAggregation | None = None,
+    status_summary: StatusSummary | None = None,
 ) -> list[ThresholdCheck]:
     checks = [
         _description_parse_rate(joined),
@@ -49,6 +55,8 @@ def check_thresholds(
         _warning_rate(results, warnings),
         _completed_rebuild_count(results),
     ]
+    if status_summary is not None:
+        checks.append(_unrecognized_status_count(status_summary))
     if tract_aggregation is not None:
         checks.append(_tract_total_matches_summary(results, tract_aggregation))
     if tract_aggregation is not None and block_group_aggregation is not None:
@@ -166,6 +174,24 @@ def _completed_rebuild_count(results: list[ParcelResult]) -> ThresholdCheck:
         threshold=float(MIN_COMPLETED_REBUILDS),
         passed=completed >= MIN_COMPLETED_REBUILDS,
         detail=f"{completed} parcels reported Construction Completed",
+    )
+
+
+def _unrecognized_status_count(summary: StatusSummary) -> ThresholdCheck:
+    """Fail if more than UNRECOGNIZED_STATUS_MAX fire cases carry a STATUS in
+    neither the active nor the inactive set. A new county status value should
+    be classified (counted or dropped) deliberately, not by silent default.
+    """
+    n = summary.unrecognized_total
+    return ThresholdCheck(
+        name="unrecognized_status_count",
+        actual=float(n),
+        threshold=float(UNRECOGNIZED_STATUS_MAX),
+        passed=n <= UNRECOGNIZED_STATUS_MAX,
+        detail=(
+            f"{n} fire case(s) carry a status in neither the active nor "
+            "inactive set; classify them in processing/normalize.py"
+        ),
     )
 
 

@@ -1,0 +1,72 @@
+{
+  "ain": "5840000001",
+  "_note": "Constructed regression case for the EPIC-LA status filter. A vacant lot whose only EPIC-LA record is an SB-1123 subdivision plan the county marked 'Void'. The record is fire-related (case-history source marker) and its text would set adds_sb1123, so without the status filter this parcel would be miscounted as an SB-1123 project. With the filter it reverts to no post-fire activity.",
+  "dins": {
+    "OBJECTID": 999001,
+    "AIN_1": "5840000001",
+    "APN_1": "5840-000-001",
+    "SitusFullAddress": "1 TEST ST ALTADENA CA 91001",
+    "UseDescription": "Vacant",
+    "DesignType1": null,
+    "SQFTmain1": null,
+    "DAMAGE_1": "No Data/Vacant",
+    "BSD_Tag": "",
+    "DINS_Count": 0,
+    "Permit_Status": "NA",
+    "ROE_Status": "NA",
+    "Debris_Cleared": "NA",
+    "COMMUNITY": "Altadena",
+    "_geometry": {
+      "rings": [
+        [
+          [-118.13, 34.19],
+          [-118.13, 34.191],
+          [-118.129, 34.191],
+          [-118.129, 34.19],
+          [-118.13, 34.19]
+        ]
+      ]
+    }
+  },
+  "epic_cases": [
+    {
+      "OBJECTID": 999101,
+      "MODULENAME": "PlanManagement",
+      "CASENUMBER": "CREB-VOID-0001",
+      "MAIN_AIN": "5840000001",
+      "WORKCLASS_NAME": "Subdivisions",
+      "DESCRIPTION": "SB 1123 SUBDIVISION - (8) FEE-SIMPLE SINGLE FAMILY LOTS",
+      "PROJECT_NAME": "SB 1123 Small-Lot Subdivision",
+      "STATUS": "Void",
+      "DISASTER_TYPE": null,
+      "REBUILD_PROGRESS_NUM": null,
+      "APPLY_DATE": 1739952000000,
+      "_source": "epicla_case_history",
+      "_geometry": {
+        "x": -118.1295,
+        "y": 34.1905
+      }
+    }
+  ],
+  "expected": {
+    "pre_sfr_sqft": null,
+    "post_sfr_sqft": null,
+    "adds_sb9": false,
+    "adds_sb1123": false,
+    "sb_pathway_conflict": false,
+    "added_adu_count": 0,
+    "rebuild_progress_num": null,
+    "lfl_claimed": null,
+    "sfr_size_comparison": null,
+    "rebuild_stage": 0,
+    "rebuild_milestone_cases": {
+      "app_received": 0,
+      "zoning_cleared": 0,
+      "plans_received": 0,
+      "plans_approved": 0,
+      "permit_issued": 0,
+      "in_construction": 0,
+      "construction_completed": 0
+    }
+  }
+}

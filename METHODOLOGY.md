@@ -64,8 +64,17 @@ EPIC-LA fields we read:
 | `REBUILD_PROGRESS_NUM` | Integer 1–7, the case's *latest* stage. Kept for the LFL "has a permit" test and QC only; **not** used for the funnel counts (the milestone fields above are). |
 | `REBUILD_PROGRESS` | Human-readable label corresponding to the number. |
 | `APPLY_DATE` | Epoch milliseconds. Used for recency ordering in LFL resolution. |
+| `STATUS` | Case status (`Issued`, `Open`, `In Review`, `Void`, `Withdrawn`, …). Used to drop terminal-negative cases — see [Case status filter](#case-status-filter). |
 | `STAT_CLASS` | EPIC-LA's structure-type tag (e.g. `New SFR not a tract`). We do *not* trust this for classification — many ADU/garage permits carry it incorrectly. |
 | `NEW_DWELLING_UNITS`, `ACCESSORY_DWELLING_UNIT`, `JUNIOR_ADU` | Carried for context and used in QC heuristics. We don't trust them as the primary structure-type signal because they conflate slots. |
+
+### Case status filter
+
+We report only what today's data supports. A case the county has marked dead — `Void`/`Voided`, `Cancelled`/`Canceled`, `Withdrawn`, `Revoked`, `Denied`, `Rejected`, `Expired` — is dropped before any counting, so no metric asserts a future state the record contradicts. Cases that are pending, submitted, in review, approved, issued, or completed are kept: they happened, or still might. This is a **denylist** — a case is counted unless its status is positively recognized as terminal-negative, so unknown or null statuses are still counted ("might happen").
+
+Matching is exact on the normalized status (lowercased, trimmed). To keep a *new* county status from being silently counted, the pipeline also holds an allowlist of recognized live statuses; a status in neither set is "unrecognized," and the run **hard-fails** if more than five fire cases carry one (see [Quality controls](#quality-controls)). `qc-report.json` carries a `status_distribution` block listing every distinct status, its case count, and its classification (`active`/`inactive`/`unrecognized`) for audit.
+
+The filter applies to **both** EPIC-LA sources — the Eaton-tagged view and the direct SB-1123 Case History pull (where roughly 40% of records have been `Void`). The taxonomy and `filter_active_cases` live in `processing/normalize.py`; the drop happens once, globally, right after the two sources are merged. Raw snapshots (`source-epicla.json`, `source-epicla-case-history.json`) are written *before* the filter and retain every status. One deliberate exception: the map's per-parcel point (`representative_point`) may still read a dropped case purely to pick a display *coordinate* — every case on a parcel shares the same location, so this never affects a count.
 
 ### Eaton Fire Perimeter
 
@@ -425,6 +434,7 @@ If any threshold fails, the run aborts with exit code 3 and **no release is publ
 | `sfr_sqft_extraction_rate` | ≥ 85% | Of permits whose `DESCRIPTION` mentions an SFR keyword and a numeric sqft, fraction the parser classified as `sfr` with a sqft. (Includes false-positive candidates where SFR is used as a descriptor, e.g. `"ADU 800 SF SFD"`; the parser correctly classifies those as ADU and they count as misses here.) |
 | `warning_rate` | ≤ 5% | Fraction of parcels that raised at least one **`data`-severity** per-record warning. `info`-severity warnings (real-world ambiguity) are excluded. |
 | `min_completed_rebuilds` | ≥ 1 | Sanity check against an empty/stale dataset — at least one parcel has reached `Construction Completed`. |
+| `unrecognized_status_count` | ≤ 5 | Number of fire cases whose `STATUS` is in neither the active nor the inactive set (see [Case status filter](#case-status-filter)). Forces a human to classify a new county status before it silently skews counts. |
 | `tract_total_matches_summary` | exact equality | `sum(tract.total_parcels) + len(unassigned)` must equal the burn-area `total_parcels`. Catches a parcel being double-counted across tracts or silently dropped during the centroid pass. |
 | `tract_partitions_into_block_groups` | exact equality | For every tract, `tract.total_parcels` must equal the sum of its block-groups' `total_parcels`. Catches drift between the two LA County census layers, or a parcel whose centroid lands in a tract but in none of that tract's block-group polygons. |
 
@@ -569,7 +579,17 @@ See [Geographic aggregations](#geographic-aggregations) for the assignment rule.
   "warnings": [
     { "ain": "5841009012", "code": "lfl_conflict", "detail": "...", "severity": "data" },
     ...
-  ]
+  ],
+  "status_distribution": {
+    "total_cases": 6047,
+    "dropped_total": 13,
+    "unrecognized_total": 0,
+    "statuses": [
+      { "status": "Issued", "count": 2639, "classification": "active" },
+      { "status": "Void", "count": 8, "classification": "inactive" },
+      ...
+    ]
+  }
 }
 ```
 
@@ -580,6 +600,7 @@ See [Geographic aggregations](#geographic-aggregations) for the assignment rule.
 | `passed` | `bool` | `true` iff every threshold's `passed` is `true`. |
 | `thresholds` | `list` | One entry per threshold. `actual` and `threshold` are floats; `detail` is a human-readable explanation including raw counts. |
 | `warnings` | `list` | One entry per per-record warning. Multiple warnings per parcel are emitted as separate entries. |
+| `status_distribution` | `object` | Audit of EPIC-LA `STATUS` values across fire cases *before* the inactive filter (see [Case status filter](#case-status-filter)). `dropped_total` is the count removed as terminal-negative; `unrecognized_total` feeds the `unrecognized_status_count` gate; `statuses` lists each distinct status with its `count` and `classification`. |
 
 ### `source-dins.json`, `source-epicla.json`
 

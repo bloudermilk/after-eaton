@@ -36,6 +36,7 @@ from .processing.llm_extraction import (
 )
 from .processing.llm_prompts import ParcelContext
 from .processing.llm_provider import LLMError, OpenRouterProvider
+from .processing.normalize import filter_active_cases
 from .processing.parcel_analysis import (
     ParcelResult,
     analyze_parcel,
@@ -47,6 +48,7 @@ from .processing.spatial_aggregate import aggregate_by_region
 from .qc.aggregate import QcFailedError, check_thresholds
 from .qc.per_record import RecordWarning, check_record, check_spatial_assignment
 from .qc.report import QcReport, enforce, print_report, write_report
+from .qc.status import summarize_statuses
 from .sources.census import fetch_census_block_groups, fetch_census_tracts
 from .sources.dins import fetch_dins_parcels
 from .sources.epicla import fetch_epicla_cases
@@ -157,6 +159,19 @@ def run(
     )
     cases = _merge_cases(cases, case_history)
 
+    # Audit STATUS values across all fire cases BEFORE dropping inactive ones, so
+    # the report can show what was dropped and flag any unclassified status. Then
+    # drop terminal-negative cases (voided/cancelled/etc.) so they never count
+    # toward any downstream metric. Raw snapshots above keep the full pull.
+    status_summary = summarize_statuses(filter_fire_cases(cases))
+    cases = filter_active_cases(cases)
+    logger.info(
+        "EPIC-LA status: %d fire cases, %d dropped as inactive, %d unrecognized",
+        status_summary.total_cases,
+        status_summary.dropped_total,
+        status_summary.unrecognized_total,
+    )
+
     logger.info("fetching census tracts within perimeter envelope")
     tracts = fetch_census_tracts(perimeter)
     logger.info("fetched %d census tracts", len(tracts))
@@ -247,6 +262,7 @@ def run(
         record_warnings,
         tract_aggregation=tract_aggregation,
         block_group_aggregation=block_group_aggregation,
+        status_summary=status_summary,
     )
     report = QcReport(
         generated_at=generated_at,
@@ -254,6 +270,7 @@ def run(
         warnings=record_warnings,
         thresholds=thresholds,
         extraction_comparison=extraction_metrics(run_info, record_warnings),
+        status_distribution=status_summary.to_dict(),
     )
     print_report(report)
     write_report(report, out_dir / "qc-report.json")
@@ -347,7 +364,10 @@ def _analyze_all(
             results.append(result)
             continue
 
-        fire_cases = filter_fire_cases(jp.cases)
+        # cases are already inactive-filtered globally; wrap defensively so this
+        # path stays correct if called on an unfiltered list (mirrors
+        # analyze_parcel).
+        fire_cases = filter_active_cases(filter_fire_cases(jp.cases))
         qualifying = select_qualifying_records(fire_cases)
         has_qualifying_permit = any(
             c.get("MODULENAME") == "PermitManagement" for c in qualifying

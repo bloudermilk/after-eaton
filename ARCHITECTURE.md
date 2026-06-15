@@ -84,11 +84,14 @@ The pipeline is a single Python package, `altadata`, exposing one CLI entrypoint
 
 ```
 fetch DINS                    → sources/dins.py
-fetch EPIC-LA                 → sources/epicla.py
+fetch EPIC-LA (Eaton view)    → sources/epicla.py
+fetch SB-1123 (Case History)  → sources/epicla_case_history.py
 fetch fire perimeter          → sources/fire_perimeter.py
 fetch census tracts/BGs       → sources/census.py        (perimeter-envelope filter)
-   → write raw snapshots to data/
+   → write raw snapshots to data/  (every status retained)
 validate schemas              → sources/schemas.py        (raises SchemaError)
+merge sources + drop inactive → cli.py + processing/normalize.py:filter_active_cases
+   (audit STATUS first → qc/status.py:summarize_statuses)
 join cases to parcels by AIN  → processing/join.py
 analyze each parcel           → processing/parcel_analysis.py
    ├─ pre-fire from DINS slots
@@ -123,7 +126,7 @@ For the analytical contract — what each derived field *means* — see [METHODO
 | `sources/fire_perimeter.py` | Thin wrapper: pulls every feature from the Eaton Fire Perimeter layer. | `fetch_fire_perimeter()` |
 | `sources/census.py` | Pulls 2020 census tracts (layer 14) intersecting the fire-perimeter envelope, then pulls every block group (layer 15) whose parent CT20 is in that tract set so block groups exactly partition the tracts. | `fetch_census_tracts()`, `fetch_census_block_groups()` |
 | `sources/schemas.py` | TypedDict definitions and `validate_*` functions. Required-field type checks; raises `SchemaError` (with `field=`) on drift. | `DinsParcel`, `EpicCase`, `FirePerimeter`, `CensusTract`, `CensusBlockGroup`, `validate_dins`, `validate_epicla`, `validate_fire_perimeter`, `validate_census_tracts`, `validate_census_block_groups` |
-| `processing/normalize.py` | Damage and BSD enums + raw→canonical maps. Rebuild-progress label table and the `REBUILD_STAGES` table mapping the seven independent milestones to their EPIC-LA fields. | `DamageLevel`, `BsdStatus`, `normalize_damage`, `normalize_bsd`, `rebuild_progress_label`, `REBUILD_STAGES` |
+| `processing/normalize.py` | Damage and BSD enums + raw→canonical maps. Rebuild-progress label table and the `REBUILD_STAGES` table mapping the seven independent milestones to their EPIC-LA fields. EPIC-LA case-status taxonomy: `INACTIVE_STATUSES` (terminal-negative denylist) and `ACTIVE_STATUSES` (recognized-live allowlist), with `filter_active_cases` to drop dead cases. | `DamageLevel`, `BsdStatus`, `normalize_damage`, `normalize_bsd`, `rebuild_progress_label`, `REBUILD_STAGES`, `INACTIVE_STATUSES`, `ACTIVE_STATUSES`, `is_active_status`, `is_recognized_status`, `filter_active_cases` |
 | `processing/description_parser.py` | EPIC-LA free-text parser: splits a DESCRIPTION into structures, classifies each as `sfr`/`adu`/`jadu`/`mfr`/`garage`/`temporary_housing`/`repair`/`retaining_wall`/`seismic`/`unknown`, extracts sqft. Bare-SB9 and bare-SB1123 segments classify as `sfr` via fallback. Also extracts LFL/Custom claim from PROJECT_NAME or DESCRIPTION, and exposes `mentions_sb9()` and `mentions_sb1123()` for parcel-level pathway detection. | `parse_description()`, `extract_lfl_claim()`, `mentions_sb9()`, `ParsedStructure`, `RESIDENTIAL_TYPES` |
 | `processing/join.py` | Group cases by `MAIN_AIN`, left-join to DINS parcels. Logs unmatched AINs. | `join_cases_to_parcels()`, `JoinedParcel` |
 | `processing/parcel_analysis.py` | Per-parcel synthesis. Reads DINS structure slots for pre-fire; selects primary permit for regex post-fire; selects qualifying records (plans + permits) for LLM input; runs LFL resolution; computes size comparison, SB-9 / SB-1123 pathway flags (text scan over DESCRIPTION/PROJECT_NAME/PROJECTNAME, resolved by recency since the two pathways are mutually exclusive), ADU deltas, and the per-milestone rebuild-progress case counts + furthest stage. | `analyze_parcel()`, `ParcelResult`, `_resolve_lfl()`, `_select_primary_permit()`, `select_qualifying_records()`, `_detect_sb9()`, `_rebuild_case_counts()`, `pre_fire_summary()` |
@@ -134,7 +137,8 @@ For the analytical contract — what each derived field *means* — see [METHODO
 | `processing/aggregate.py` | Roll `ParcelResult` list into `SummaryResult` (counts only, no per-parcel detail). The shared `count_parcels()` helper produces the same counting set used by per-tract / per-block-group aggregation. | `aggregate_burn_area()`, `count_parcels()`, `SummaryResult`, `RegionCounts` |
 | `processing/spatial_aggregate.py` | Assign each parcel to one tract and one block group by polygon-centroid containment (shapely STRtree); roll up per-region counts. | `aggregate_by_region()`, `RegionFeature`, `SpatialAggregation` |
 | `qc/per_record.py` | Per-parcel data-quality warnings. Each warning carries a `severity` of `data` (counts toward threshold) or `info` (real-world ambiguity, surfaced but doesn't gate the run). | `check_record()`, `RecordWarning` |
-| `qc/aggregate.py` | Four hard-fail dataset-level checks. Constants at top of file are tunable. | `check_thresholds()`, `ThresholdCheck`, `QcFailedError` |
+| `qc/status.py` | Tallies EPIC-LA `STATUS` values across fire cases (pre-filter) into a `StatusSummary` — per-status counts + classification (`active`/`inactive`/`unrecognized`), `dropped_total`, `unrecognized_total`. Feeds both the `unrecognized_status_count` gate and the `status_distribution` report block. | `summarize_statuses()`, `StatusSummary` |
+| `qc/aggregate.py` | Hard-fail dataset-level checks (including `unrecognized_status_count`). Constants at top of file are tunable. | `check_thresholds()`, `ThresholdCheck`, `QcFailedError` |
 | `qc/report.py` | Formats and writes `qc-report.json`; pretty-prints to stdout. | `QcReport`, `print_report`, `write_report`, `enforce` |
 | `outputs/geojson_writer.py` | Per-feature GeoJSON output. Converts ArcGIS rings to GeoJSON Polygon/MultiPolygon (`esri_to_geojson` is reused by the region writer). Also writes the web-optimized point file (`parcels-compact.geojson`) via `representative_point` + the shared bucket classifiers. | `write_parcels_geojson()`, `write_parcels_compact_geojson()`, `esri_to_geojson()` |
 | `processing/geometry.py` | Per-parcel point geometry: `dins_polygon_centroid` (used for region assignment) and `representative_point` (EPIC-LA case point preferred, DINS centroid fallback; used by the compact writer). | `dins_polygon_centroid()`, `representative_point()` |
@@ -168,6 +172,7 @@ Hard-fail thresholds live as constants at the top of `qc/aggregate.py`:
 | `SFR_SQFT_EXTRACTION_MIN_RATE` | 0.85 | Of permits whose DESCRIPTION mentions an SFR keyword and a numeric sqft, fraction the parser classifies as `sfr` with a sqft. |
 | `WARNING_RATE_MAX` | 0.05 | Maximum fraction of parcels allowed to raise a `data`-severity per-record warning (`info` warnings excluded). |
 | `MIN_COMPLETED_REBUILDS` | 1 | Sanity check against an empty/stale dataset. |
+| `UNRECOGNIZED_STATUS_MAX` | 5 | Maximum fire cases allowed to carry a `STATUS` in neither the active nor the inactive set (`processing/normalize.py`). Forces classification of a new county status before it skews counts. |
 
 In addition, two spatial-aggregation invariants run as hard-fail equality checks (no tunable threshold — they must be 0):
 
@@ -193,7 +198,7 @@ All outputs are written to `data/` locally and uploaded as Release assets in CI:
 | `parcels-compact.geojson` | GeoJSON FeatureCollection | Web-optimized: one **Point** per parcel (centroid via `representative_point` — EPIC-LA case point preferred, DINS polygon centroid fallback) carrying the attributes the frontend map reads. Map coloring/filtering keys: `ain`, `address`, `sfr_size_bucket`, `lfl_bucket`, `adu_bucket`, `adds_sb9`, `adds_sb1123`, the seven `rebuild_*` milestone booleans, and `rebuild_stage`. The per-parcel bucket keys / milestone flags come from the same classifiers that produce `summary.json`'s counts, so the map can never drift from the summary. The per-parcel detail popup additionally reads raw figures: `pre_sfr_count`, `post_sfr_count`, `pre_sfr_sqft`, `post_sfr_sqft`, `pre_adu_count`, `post_adu_count`, `added_adu_count`, plus `damage` (FIRESCOPE %-loss bucket) and `bsd_status` (Red/Yellow/Green safety tag). Post-fire fields are `null` until a rebuild permit is filed. The popup links out to EPIC-LA by searching the public Self-Service portal for the parcel's `ain` (no case id is carried — see `web/src/constants.ts:epiclaSearchUrl`). |
 | `parcels.csv` | CSV | Same per-parcel attributes as `parcels.geojson`, no geometry. End-user-friendly download surfaced in the site footer. |
 | `summary.json` | JSON object | Burn-area totals (counts). |
-| `qc-report.json` | JSON object | Pass/fail of every threshold + every per-record warning that fired. |
+| `qc-report.json` | JSON object | Pass/fail of every threshold + every per-record warning that fired + a `status_distribution` audit of EPIC-LA `STATUS` values (counts, classification, how many dropped as inactive). |
 | `2020-census-tracts.geojson` | GeoJSON FeatureCollection | One feature per 2020 census tract intersecting the perimeter; attributes are identifiers (`ct20`, `label`) plus every `RegionCounts` field. |
 | `2020-census-block-groups.geojson` | GeoJSON FeatureCollection | One feature per 2020 census block group intersecting the perimeter; attributes are identifiers (`bg20`, `ct20`, `label`) plus every `RegionCounts` field. |
 | `source-dins.json` | JSON object | Raw fetched DINS records (`{source, fetched_at, record_count, records}`). |
