@@ -36,7 +36,7 @@ export const BASEMAP_STYLE_URL = `${baseUrl}map-style.json`;
 const EPICLA_SEARCH_BASE = "https://epicla.lacounty.gov/energov_prod/SelfService/#/search";
 
 export function epiclaSearchUrl(ain: string): string {
-  return `${EPICLA_SEARCH_BASE}?m=1&fm=1&ps=10&pn=1&em=true&st=${encodeURIComponent(ain)}`;
+  return `${EPICLA_SEARCH_BASE}?m=1&fm=1&ps=50&pn=1&em=true&st=${encodeURIComponent(ain)}`;
 }
 
 // County Assessor parcel-detail page, keyed by AIN in the URL path.
