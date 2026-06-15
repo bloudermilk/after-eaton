@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 import StatCard from "@/components/StatCard.vue";
 import InfoButton from "@/components/InfoButton.vue";
@@ -68,6 +68,42 @@ function centerCardOnTap(event: MouseEvent): void {
   });
 }
 
+// On mobile the rail is a horizontal snap carousel. As the user swipes (or taps,
+// via centerCardOnTap above), focus the metric of whichever card lands in the
+// center so the map tracks the card you're looking at. Guarded to the mobile
+// breakpoint — the desktop rail is a vertical column where this makes no sense.
+const railEl = ref<HTMLElement | null>(null);
+let scrollSettleTimer: ReturnType<typeof setTimeout> | undefined;
+
+function selectCenteredCard(): void {
+  const rail = railEl.value;
+  if (!rail || !window.matchMedia("(max-width: 767.98px)").matches) return;
+  const railCenter = rail.scrollLeft + rail.clientWidth / 2;
+  let closestId: string | undefined;
+  let closestDist = Infinity;
+  for (const card of rail.querySelectorAll<HTMLElement>("[data-metric-id]")) {
+    const dist = Math.abs(card.offsetLeft + card.offsetWidth / 2 - railCenter);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closestId = card.dataset.metricId;
+    }
+  }
+  // Only switch on a genuine change of card — settling back on the focused card
+  // must not call toggleMetric, which would wipe its bucket selection.
+  if (closestId && closestId !== focusedMetricId.value) toggleMetric(closestId);
+}
+
+function onRailScroll(): void {
+  clearTimeout(scrollSettleTimer);
+  scrollSettleTimer = setTimeout(selectCenteredCard, 120);
+}
+
+onMounted(() => railEl.value?.addEventListener("scroll", onRailScroll, { passive: true }));
+onBeforeUnmount(() => {
+  railEl.value?.removeEventListener("scroll", onRailScroll);
+  clearTimeout(scrollSettleTimer);
+});
+
 const dataAsOfLabel = computed(() => {
   if (!generatedAt.value) return null;
   return generatedAt.value.toLocaleDateString("en-US", {
@@ -83,7 +119,7 @@ const dataAsOfLabel = computed(() => {
 
 <template>
   <main v-if="summary" class="home">
-    <div class="home__rail">
+    <div ref="railEl" class="home__rail">
       <div class="home__intro">
         <h1>Rebuilding Altadena</h1>
         <p>
@@ -99,6 +135,7 @@ const dataAsOfLabel = computed(() => {
         interactive
         :active="isCardActive('new_construction')"
         class="home__card"
+        data-metric-id="new_construction"
         @click="centerCardOnTap"
         @toggle="(additive) => toggleMetric('new_construction', additive)"
       >
@@ -144,6 +181,7 @@ const dataAsOfLabel = computed(() => {
         interactive
         :active="isCardActive('sfr_size')"
         class="home__card"
+        data-metric-id="sfr_size"
         @click="centerCardOnTap"
         @toggle="(additive) => toggleMetric('sfr_size', additive)"
       >
@@ -175,6 +213,7 @@ const dataAsOfLabel = computed(() => {
         interactive
         :active="isCardActive('lfl')"
         class="home__card"
+        data-metric-id="lfl"
         @click="centerCardOnTap"
         @toggle="(additive) => toggleMetric('lfl', additive)"
       >
@@ -206,6 +245,7 @@ const dataAsOfLabel = computed(() => {
         interactive
         :active="isCardActive('adu')"
         class="home__card"
+        data-metric-id="adu"
         @click="centerCardOnTap"
         @toggle="(additive) => toggleMetric('adu', additive)"
       >
@@ -237,6 +277,7 @@ const dataAsOfLabel = computed(() => {
         interactive
         :active="isCardActive('density')"
         class="home__card"
+        data-metric-id="density"
         @click="centerCardOnTap"
         @toggle="(additive) => toggleMetric('density', additive)"
       >
