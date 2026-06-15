@@ -124,7 +124,7 @@ export const METRICS: MetricDef[] = [
       {
         key: "rebuilding",
         label: "Rebuilding",
-        color: C.liveOakSoft,
+        color: C.lupinSoft,
         summaryKey: "rebuild_progress_rebuilding_count",
       },
     ],
