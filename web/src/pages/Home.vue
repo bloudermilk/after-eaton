@@ -121,6 +121,7 @@ onBeforeUnmount(() => {
         interactive
         :active="isCardActive('rebuild_progress')"
         class="home__card"
+        data-metric-id="rebuild_progress"
         @click="centerCardOnTap"
         @toggle="(additive) => toggleMetric('rebuild_progress', additive)"
       >
@@ -379,16 +380,17 @@ onBeforeUnmount(() => {
   overflow-y: hidden;
   background: transparent;
   scroll-snap-type: x mandatory;
-  /* Let touches fall through the transparent gaps to the map; cards opt back
-     in below so they stay tappable and scrollable. */
-  pointer-events: none;
+  /* The rail must stay hit-testable so it can be swiped: a `pointer-events: none`
+     scroll container can't be panned by touch (the swipe gesture has no target,
+     which is what disabled native sliding on iOS). The map stays interactive in
+     the large area above the bottom card band — the rail only ever covers that
+     band, never the rest of the full-height map. */
 }
 
 .home__rail :deep(.stat-card) {
   flex: 0 0 88%;
   /* Center each card so middle cards show an equal peek of their neighbors. */
   scroll-snap-align: center;
-  pointer-events: auto;
 }
 
 .home__map {
@@ -418,7 +420,6 @@ onBeforeUnmount(() => {
     border-top: none;
     border-right: 1px solid var(--color-rule);
     scroll-snap-type: none;
-    pointer-events: auto;
   }
 
   /* Restore natural order: rail on the left, map on the right. */

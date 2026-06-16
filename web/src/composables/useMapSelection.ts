@@ -6,7 +6,7 @@ import { METRICS } from "../metrics";
 // map's color ramp and which card is "primary"), so this is the metric a user
 // can never fully clear out of. Always the first metric in the list, so the
 // default tracks the rail's ordering.
-const DEFAULT_METRIC_ID = METRICS[0].id;
+const DEFAULT_METRIC_ID = METRICS[0]!.id;
 
 // Module-scoped so the cards rail and the map share one selection.
 //
