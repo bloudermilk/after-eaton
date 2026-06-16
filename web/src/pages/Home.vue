@@ -63,11 +63,23 @@ function isCardActive(metricId: string): boolean {
   return focusedMetricId.value === metricId || selectedBucketsFor(metricId).length > 0;
 }
 
-// Any tap on a card brings it fully into view (centered, matching the mobile
-// snap). This runs alongside — not instead of — the header-toggle / bucket
-// selection, and is effectively a no-op on desktop where cards are already
-// fully visible in the vertical rail.
-function centerCardOnTap(event: MouseEvent): void {
+// Tap behavior for the mobile rail. A tap on an off-center (partially obscured)
+// card is a single, unambiguous "bring this metric forward" gesture: it
+// activates the whole metric and scrolls the card to center, swallowing the
+// bucket-select / info-open / header-toggle tap that happened to land on the
+// obscured card. Once a card is centered (it is the focused metric), taps fall
+// through untouched so the user can drill into buckets or open the info panel.
+//
+// Runs in the capture phase so it can intercept the inner button clicks before
+// they fire. A no-op on desktop, where every card is fully visible in the
+// vertical rail and direct interaction is already unambiguous.
+function onCardTap(metricId: string, event: MouseEvent): void {
+  if (!window.matchMedia("(max-width: 767.98px)").matches) return;
+  // The focused metric is the centered, fully-visible card — let taps act on it.
+  if (focusedMetricId.value === metricId) return;
+  event.stopPropagation();
+  event.preventDefault();
+  toggleMetric(metricId);
   (event.currentTarget as HTMLElement).scrollIntoView({
     behavior: "smooth",
     inline: "center",
@@ -122,7 +134,7 @@ onBeforeUnmount(() => {
         :active="isCardActive('rebuild_progress')"
         class="home__card"
         data-metric-id="rebuild_progress"
-        @click="centerCardOnTap"
+        @click.capture="onCardTap('rebuild_progress', $event)"
         @toggle="(additive) => toggleMetric('rebuild_progress', additive)"
       >
         <template #info>
@@ -159,7 +171,7 @@ onBeforeUnmount(() => {
         :active="isCardActive('new_construction')"
         class="home__card"
         data-metric-id="new_construction"
-        @click="centerCardOnTap"
+        @click.capture="onCardTap('new_construction', $event)"
         @toggle="(additive) => toggleMetric('new_construction', additive)"
       >
         <template #info>
@@ -205,7 +217,7 @@ onBeforeUnmount(() => {
         :active="isCardActive('sfr_size')"
         class="home__card"
         data-metric-id="sfr_size"
-        @click="centerCardOnTap"
+        @click.capture="onCardTap('sfr_size', $event)"
         @toggle="(additive) => toggleMetric('sfr_size', additive)"
       >
         <template #info>
@@ -237,7 +249,7 @@ onBeforeUnmount(() => {
         :active="isCardActive('lfl')"
         class="home__card"
         data-metric-id="lfl"
-        @click="centerCardOnTap"
+        @click.capture="onCardTap('lfl', $event)"
         @toggle="(additive) => toggleMetric('lfl', additive)"
       >
         <template #info>
@@ -269,7 +281,7 @@ onBeforeUnmount(() => {
         :active="isCardActive('adu')"
         class="home__card"
         data-metric-id="adu"
-        @click="centerCardOnTap"
+        @click.capture="onCardTap('adu', $event)"
         @toggle="(additive) => toggleMetric('adu', additive)"
       >
         <template #info>
@@ -301,7 +313,7 @@ onBeforeUnmount(() => {
         :active="isCardActive('density')"
         class="home__card"
         data-metric-id="density"
-        @click="centerCardOnTap"
+        @click.capture="onCardTap('density', $event)"
         @toggle="(additive) => toggleMetric('density', additive)"
       >
         <template #info>
