@@ -50,6 +50,10 @@ function onBackdropClick(event: MouseEvent) {
           <strong>Altadata</strong> is free and open source. Built by Altadenans, for Altadena.
           <a :href="REPO_URL" target="_blank" rel="noopener">View source on GitHub</a>.
         </p>
+        <p>
+          For questions, comments, or corrections please contact
+          <a href="mailto:hello@altadata.org">hello@altadata.org</a>.
+        </p>
         <p v-if="dataAsOfLabel" class="about-dialog__pill">Data as of {{ dataAsOfLabel }}</p>
         <nav class="about-dialog__links" aria-label="Resources">
           <RouterLink to="/quality-control" @click="close">Quality Control</RouterLink>
