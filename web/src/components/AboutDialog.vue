@@ -46,8 +46,11 @@ function onBackdropClick(event: MouseEvent) {
       </header>
       <div class="about-dialog__body">
         <p>
-          A living analysis of how Altadena is rebuilding after the Eaton Fire of 2025.
-          <strong>Altadata</strong> is free and open source. Built by Altadenans, for Altadena.
+          A living analysis of how Altadena is rebuilding after the Eaton Fire of 2025. Altadata is
+          free and open source. Built by Altadenans, for Altadena.
+        </p>
+        <p>
+          <strong>Notice:</strong> This website actively being developed and may contain errors.
         </p>
         <p>
           For questions, comments, or corrections please contact
