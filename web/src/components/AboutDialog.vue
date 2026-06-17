@@ -48,7 +48,6 @@ function onBackdropClick(event: MouseEvent) {
         <p>
           A living analysis of how Altadena is rebuilding after the Eaton Fire of 2025.
           <strong>Altadata</strong> is free and open source. Built by Altadenans, for Altadena.
-          <a :href="REPO_URL" target="_blank" rel="noopener">View source on GitHub</a>.
         </p>
         <p>
           For questions, comments, or corrections please contact
@@ -58,6 +57,7 @@ function onBackdropClick(event: MouseEvent) {
         <nav class="about-dialog__links" aria-label="Resources">
           <RouterLink to="/quality-control" @click="close">Quality Control</RouterLink>
           <a :href="DATA_PATHS.parcelsCsv" download>Download parcels.csv</a>
+          <a :href="REPO_URL" target="_blank" rel="noopener">Source Code</a>
         </nav>
       </div>
     </article>
