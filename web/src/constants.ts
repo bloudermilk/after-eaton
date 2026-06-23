@@ -45,3 +45,6 @@ const ASSESSOR_PORTAL_BASE = "https://portal.assessor.lacounty.gov/parceldetail"
 export function assessorPortalUrl(ain: string): string {
   return `${ASSESSOR_PORTAL_BASE}/${encodeURIComponent(ain)}`;
 }
+
+export const COUNTY_DASH =
+  "https://app.powerbigov.us/view?r=eyJrIjoiNzQ1YWIxN2UtNTFjZC00Yjg5LWE5YzctMzUwYWY3YjhjYTQ5IiwidCI6IjA3NTk3MjQ4LWVhMzgtNDUxYi04YWJlLWE2MzhlZGRiYWM4MSJ9";

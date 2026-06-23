@@ -165,6 +165,7 @@ onBeforeUnmount(() => {
       </StatCard>
 
       <StatCard
+        v-if="false"
         title="New construction"
         subtitle="Rebuild milestones"
         interactive

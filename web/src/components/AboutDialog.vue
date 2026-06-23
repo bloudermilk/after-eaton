@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, useTemplateRef } from "vue";
 
-import { DATA_PATHS, REPO_URL } from "@/constants";
+import { COUNTY_DASH, DATA_PATHS, REPO_URL } from "@/constants";
 import { useDataset } from "@/composables/useDataset";
 
 const dialog = useTemplateRef<HTMLDialogElement>("dialog");
@@ -51,6 +51,9 @@ function onBackdropClick(event: MouseEvent) {
         </p>
         <p>
           <strong>Notice:</strong> This website actively being developed and may contain errors.
+          Reference the
+          <a :href="COUNTY_DASH" target="_blank" rel="noopener">County Dashboard</a> for official
+          rebuild progress statistics.
         </p>
         <p>
           For questions, comments, or corrections please contact
