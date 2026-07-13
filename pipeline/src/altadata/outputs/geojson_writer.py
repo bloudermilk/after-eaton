@@ -10,6 +10,7 @@ from typing import Any
 from ..processing.aggregate import (
     adu_bucket,
     lfl_bucket,
+    property_sales_bucket,
     rebuild_progress_bucket,
     sfr_size_bucket,
 )
@@ -115,6 +116,20 @@ def _to_compact_feature(
         # safety tag, for context in the popup.
         "damage": result.damage.value,
         "bsd_status": result.bsd_status.value,
+        # Post-fire real-estate activity (RentCast). The bucket ("sold" | "listed"
+        # | "none", scoped to the Destroyed/Damaged population) drives the
+        # "Property Sales" card + map filter; the raw fields feed the popup.
+        "property_sales_bucket": property_sales_bucket(result),
+        "sold_post_fire": result.sold_post_fire,
+        "last_sale_date": result.last_sale_date,
+        "last_sale_price": result.last_sale_price,
+        "buyer_name": result.buyer_name,
+        "owner_type": result.owner_type,
+        "owner_occupied": result.owner_occupied,
+        "active_listing": result.active_listing,
+        "listing_date": result.listing_date,
+        "listing_status": result.listing_status,
+        "listing_price": result.listing_price,
     }
     return {
         "type": "Feature",

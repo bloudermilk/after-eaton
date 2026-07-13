@@ -11,6 +11,8 @@ Two related concerns live here so they share a single source of truth:
 
 from __future__ import annotations
 
+import math
+
 from shapely.geometry import Point, Polygon
 
 from ..sources.schemas import DinsParcel, EpicCase, FirePerimeter
@@ -55,6 +57,27 @@ def bounding_envelope(
     if not xs:
         raise ValueError("perimeter has no polygon geometry to bound")
     return (min(xs), min(ys), max(xs), max(ys))
+
+
+def circle_from_bounds(
+    bounds: tuple[float, float, float, float],
+) -> tuple[float, float, float]:
+    """Return `(latitude, longitude, radius_miles)` for a WGS84 bounding box.
+
+    RentCast's area queries take a center point + radius rather than an
+    envelope, so we wrap the burn-area bounds in the smallest circle that
+    covers them (center-to-corner distance, +5% margin, capped at RentCast's
+    100-mile maximum). Used to scope the sales/listing pulls to the burn area.
+    """
+    xmin, ymin, xmax, ymax = bounds
+    lat = (ymin + ymax) / 2
+    lon = (xmin + xmax) / 2
+    mi_per_deg_lat = 69.0
+    mi_per_deg_lon = 69.0 * math.cos(math.radians(lat))
+    half_lat_mi = (ymax - ymin) / 2 * mi_per_deg_lat
+    half_lon_mi = (xmax - xmin) / 2 * mi_per_deg_lon
+    radius = math.hypot(half_lat_mi, half_lon_mi) * 1.05
+    return lat, lon, min(round(radius, 3), 100.0)
 
 
 def representative_point(joined: JoinedParcel) -> tuple[float, float] | None:

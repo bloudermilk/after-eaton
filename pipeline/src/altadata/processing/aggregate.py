@@ -85,6 +85,13 @@ class RegionCounts:
     # The two are mutually exclusive and sum to bsd_red_or_yellow_count.
     rebuild_progress_not_started_count: int
     rebuild_progress_rebuilding_count: int
+    # Post-fire real-estate activity within the Destroyed/Damaged (BSD red/yellow)
+    # population — the "Property Sales" card. Each is a share of
+    # bsd_red_or_yellow_count. Counted independently: a parcel both sold and
+    # listed (rare) counts in both (see property_sales_bucket for the map's
+    # single-bucket precedence).
+    property_sold_post_fire_count: int
+    property_active_listing_count: int
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -164,6 +171,24 @@ def rebuild_progress_bucket(parcel: ParcelResult) -> str:
     return "rebuilding" if parcel.fire_case_count > 0 else "not_started"
 
 
+def property_sales_bucket(parcel: ParcelResult) -> str:
+    """Post-fire real-estate activity within the Destroyed/Damaged population.
+
+    Scoped to BSD Red/Yellow parcels — the same population as the "Rebuild
+    progress" card and the `property_*_count` denominator — so the map filter
+    lines up with the card counts. `listed` takes precedence over `sold` on the
+    rare parcel that is both (a home is not usually both at once). `none` =
+    outside the population or no post-fire sale/listing.
+    """
+    if parcel.bsd_status not in (BsdStatus.RED, BsdStatus.YELLOW):
+        return "none"
+    if parcel.active_listing:
+        return "listed"
+    if parcel.sold_post_fire:
+        return "sold"
+    return "none"
+
+
 def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
     """Compute every published count field for a parcel set.
 
@@ -234,6 +259,15 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
         1 for p in parcels if rebuild_progress_bucket(p) == "rebuilding"
     )
 
+    # Property sales within the Destroyed/Damaged (BSD red/yellow) population.
+    # Counted independently (not via property_sales_bucket, which is single-valued
+    # for the map) so the two card numbers match their own predicates exactly.
+    damaged_pop = [
+        p for p in parcels if p.bsd_status in (BsdStatus.RED, BsdStatus.YELLOW)
+    ]
+    property_sold = sum(1 for p in damaged_pop if p.sold_post_fire)
+    property_listed = sum(1 for p in damaged_pop if p.active_listing)
+
     return RegionCounts(
         total_parcels=total,
         damaged_parcels=damaged,
@@ -273,6 +307,8 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
         dwelling_rebuild_count=dwelling_rebuild,
         rebuild_progress_not_started_count=rebuild_progress_not_started,
         rebuild_progress_rebuilding_count=rebuild_progress_rebuilding,
+        property_sold_post_fire_count=property_sold,
+        property_active_listing_count=property_listed,
     )
 
 

@@ -15,7 +15,8 @@ export type MetricId =
   | "sfr_size"
   | "lfl"
   | "adu"
-  | "density";
+  | "density"
+  | "property_sales";
 export type ChartKind = "vbars" | "donut" | "dist" | "bignumber" | "stagelist";
 
 /**
@@ -269,6 +270,30 @@ export const METRICS: MetricDef[] = [
     buckets: [
       { key: "sb9", label: "SB 9", color: C.poppy, summaryKey: "sb9_count" },
       { key: "sb1123", label: "SB 1123", color: C.lupin, summaryKey: "sb1123_count" },
+    ],
+  },
+  {
+    id: "property_sales",
+    title: "Property sales",
+    subtitle: "Post-fire sales & active listings",
+    chart: "bignumber",
+    // property_sales_bucket resolves each parcel to "sold" | "listed" | "none"
+    // (scoped to the Destroyed/Damaged population in the pipeline). The two
+    // counts are shares of bsd_red_or_yellow_count (the card's denominator).
+    valueExpr: get("property_sales_bucket"),
+    buckets: [
+      {
+        key: "sold",
+        label: "Sold",
+        color: C.deodara,
+        summaryKey: "property_sold_post_fire_count",
+      },
+      {
+        key: "listed",
+        label: "Listed",
+        color: C.poppy,
+        summaryKey: "property_active_listing_count",
+      },
     ],
   },
 ];

@@ -57,6 +57,14 @@ const densityBuckets = getMetric("density")?.buckets ?? [];
 const sb9Color = densityBuckets.find((b) => b.key === "sb9")?.color;
 const sb1123Color = densityBuckets.find((b) => b.key === "sb1123")?.color;
 
+// Property-sales colors, same pattern. Both counts are shares of the County's
+// Destroyed/Damaged population (== bsd_red_or_yellow_count), matching the
+// pipeline's property_*_count denominator and the Rebuild progress universe.
+const propertyBuckets = getMetric("property_sales")?.buckets ?? [];
+const soldColor = propertyBuckets.find((b) => b.key === "sold")?.color;
+const listedColor = propertyBuckets.find((b) => b.key === "listed")?.color;
+const damagedDestroyedDenominator = computed(() => summary.value?.bsd_red_or_yellow_count ?? 0);
+
 // A card shows the accent border when it's the focused metric (its ramp colors
 // the map) or when it has any bucket in the filter set (a participating metric).
 function isCardActive(metricId: string): boolean {
@@ -350,6 +358,54 @@ onBeforeUnmount(() => {
             :color="sb1123Color"
             :selected-buckets="selectedBucketsFor('density')"
             @select="(key, additive) => selectBucket('density', key, additive)"
+          />
+        </div>
+      </StatCard>
+
+      <StatCard
+        title="Property sales"
+        subtitle="Post-fire sales & active listings"
+        interactive
+        :active="isCardActive('property_sales')"
+        class="home__card"
+        data-metric-id="property_sales"
+        @click.capture="onCardTap('property_sales', $event)"
+        @toggle="(additive) => toggleMetric('property_sales', additive)"
+      >
+        <template #info>
+          <InfoButton title="Property sales">
+            <p>
+              Real-estate activity on destroyed and damaged parcels since the fire, from
+              <strong>RentCast</strong>. <strong>Sold</strong> counts parcels that changed hands
+              after <strong>January 7, 2025</strong>; <strong>Listed</strong> counts parcels with an
+              active for-sale listing. Each percentage is a share of the County's Destroyed/Damaged
+              parcels (Red- or Yellow-tagged) — the same population as Rebuild progress.
+            </p>
+            <p>
+              For sold parcels, the new owner of record is treated as the buyer. Tap a number to
+              highlight those parcels on the map; open a parcel to see its sale date, buyer, and
+              listing date.
+            </p>
+          </InfoButton>
+        </template>
+        <div class="paired-numbers">
+          <BigNumber
+            :value="summary.property_sold_post_fire_count"
+            label="Sold"
+            bucket-key="sold"
+            :color="soldColor"
+            :denominator="damagedDestroyedDenominator"
+            :selected-buckets="selectedBucketsFor('property_sales')"
+            @select="(key, additive) => selectBucket('property_sales', key, additive)"
+          />
+          <BigNumber
+            :value="summary.property_active_listing_count"
+            label="Listed"
+            bucket-key="listed"
+            :color="listedColor"
+            :denominator="damagedDestroyedDenominator"
+            :selected-buckets="selectedBucketsFor('property_sales')"
+            @select="(key, additive) => selectBucket('property_sales', key, additive)"
           />
         </div>
       </StatCard>

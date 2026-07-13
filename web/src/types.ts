@@ -53,6 +53,12 @@ export interface Summary {
   // vs. any. Mutually exclusive; the two sum to bsd_red_or_yellow_count.
   rebuild_progress_not_started_count: number;
   rebuild_progress_rebuilding_count: number;
+  // "Property Sales" card: post-fire real-estate activity within the same
+  // Destroyed/Damaged (BSD Red/Yellow) population, from RentCast. Each is a
+  // share of bsd_red_or_yellow_count. Counted independently (a parcel both sold
+  // and listed is rare but counts in both).
+  property_sold_post_fire_count: number;
+  property_active_listing_count: number;
 }
 
 // Shape of parcels-compact.geojson — one Point per parcel carrying only the
@@ -97,6 +103,21 @@ export interface ParcelProperties {
   // "no_damage" | "no_data") and safety tag ("red" | "yellow" | "green" | "none").
   damage: string;
   bsd_status: string;
+  // Post-fire real-estate activity (RentCast). `property_sales_bucket` ("sold" |
+  // "listed" | "none", scoped to the Destroyed/Damaged population) drives the
+  // "Property Sales" card + map filter; the rest feed the detail popup. Sale/
+  // listing fields are null when the parcel has no post-fire activity.
+  property_sales_bucket: string;
+  sold_post_fire: boolean;
+  last_sale_date: string | null;
+  last_sale_price: number | null;
+  buyer_name: string | null;
+  owner_type: string | null;
+  owner_occupied: boolean | null;
+  active_listing: boolean;
+  listing_date: string | null;
+  listing_status: string | null;
+  listing_price: number | null;
 }
 
 export interface ParcelFeature {
