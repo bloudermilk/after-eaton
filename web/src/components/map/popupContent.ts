@@ -73,16 +73,15 @@ export function buildPopupContent(props: ParcelProperties): HTMLElement {
   const bsdLabel = BSD_LABELS[props.bsd_status];
   addRow(grid, "Damage", bsdLabel ? `${damageLabel} · ${bsdLabel}` : damageLabel);
 
-  // New-construction funnel position (stages 3–7 → "Plans received" …
-  // "Completed"). Stage 0 means no new-building permit has reached
-  // plan check yet — the funnel's first row is "Plans received" (stage 3), so
-  // there's no bucket for stage 0 and we show a clearer phrase instead.
-  const stageLabel =
-    props.rebuild_new_stage > 0
-      ? (getMetric("new_construction")?.buckets.find((b) => b.stage === props.rebuild_new_stage)
-          ?.label ?? "—")
-      : "No new-build permit yet";
-  addRow(grid, "Rebuild stage", stageLabel);
+  // Rebuild milestones reached, in funnel order. The new-construction funnel is
+  // monotonic (stages 3–7 → "Plans received" … "Completed"), so a parcel at
+  // `rebuild_new_stage` has also reached every earlier milestone — list them all
+  // up to the furthest. Stage 0 means no new-building permit has reached plan
+  // check yet, so nothing has started.
+  const milestones = (getMetric("new_construction")?.buckets ?? [])
+    .filter((b) => (b.stage ?? 0) <= props.rebuild_new_stage)
+    .map((b) => b.label);
+  addRow(grid, "Rebuild", milestones.length > 0 ? milestones.join(", ") : "Not started");
 
   // Pre → post structure figures (post is null until a rebuild permit is filed).
   // Counts and sizes are paired per dwelling type: SFRs then ADUs.

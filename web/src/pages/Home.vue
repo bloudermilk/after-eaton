@@ -154,11 +154,11 @@ onBeforeUnmount(() => {
               This is the County's official "Destroyed/Damaged Parcels" population.
             </p>
             <p>
-              <strong>Rebuilding</strong> means the parcel has at least one active rebuild case on
-              file with the county (EPIC-LA), in any stage — from a freshly filed application
-              through completed construction. <strong>Not started</strong> means no active case
-              exists yet. Cases the county has voided, cancelled, withdrawn, or otherwise marked
-              dead don't count.
+              <strong>Started</strong> means the parcel has at least one active rebuild case on file
+              with the county (EPIC-LA), in any stage — from a freshly filed application through
+              completed construction. <strong>Not started</strong> means no active case exists yet.
+              Cases the county has voided, cancelled, withdrawn, or otherwise marked dead don't
+              count.
             </p>
             <p>
               The two groups are mutually exclusive and together make up every destroyed/damaged
