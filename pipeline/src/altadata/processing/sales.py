@@ -2,8 +2,11 @@
 
 RentCast is fetched for the whole burn area (see ``sources.rentcast``); this
 module joins those records back to DINS parcels by AIN — the parcel's assessor
-number, matched from RentCast's ``assessorID`` first and the street address as a
-fallback — and overlays the post-fire sale / active-listing fields onto each
+number, matched from RentCast's ``assessorID`` (APN) first, then by
+point-in-polygon on the record's ``latitude``/``longitude`` and accepted only
+when the parcel's street number matches (which rejects wrong-parcel hits and
+disambiguates overlapping / multi-address DINS polygons such as shared condo
+parcels) — and overlays the post-fire sale / active-listing fields onto each
 ``ParcelResult``.
 
 The post-fire sold set is an *accumulator*: each pipeline run fetches only a
@@ -11,6 +14,10 @@ short recent window and upserts it into a persistent cache (``rentcast-cache.jso
 so the full set of sales since the fire survives across runs without re-fetching
 everything. Active listings are a full snapshot, replaced each run. The cache
 also provides resilience — on a fetch failure the CLI reuses the last-good cache.
+
+RentCast is a *service*, not a published source (like OpenRouter): its raw API
+responses are deliberately never written to a ``source-*.json`` release asset —
+only the derived per-parcel fields flow into the data contract via ``ParcelResult``.
 """
 
 from __future__ import annotations
@@ -24,6 +31,11 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+from shapely.geometry import Point, shape
+from shapely.geometry.base import BaseGeometry
+from shapely.strtree import STRtree
+
+from ..outputs.geojson_writer import esri_to_geojson
 from ..sources.schemas import DinsParcel, RentCastListing, RentCastProperty
 from .parcel_analysis import ParcelResult
 
@@ -50,12 +62,16 @@ FULL_RECONCILE_EVERY_DAYS = 30
 
 @dataclass
 class SaleInfo:
-    """A post-fire sale matched to one parcel (the current owner is the buyer)."""
+    """A post-fire sale matched to one parcel.
+
+    Fields mirror RentCast's `owner` object: after a sale the current owner of
+    record is the buyer, so `owner_*` here is the post-fire owner.
+    """
 
     ain: str
     sale_date: str
     sale_price: int | None
-    buyer_name: str | None
+    owner_name: str | None
     owner_type: str | None
     owner_occupied: bool | None
 
@@ -87,28 +103,62 @@ class SalesCache:
 
 @dataclass(frozen=True)
 class ParcelsIndex:
-    """Lookup from RentCast identifiers back to a DINS parcel AIN."""
+    """Resolve a RentCast record back to a DINS parcel AIN.
+
+    Two matchers, tried in order by the callers:
+
+    - ``match_apn`` — exact, digit-normalized APN lookup (primary; sold records
+      carry ``assessorID``).
+    - ``match_point`` — number-gated point-in-polygon fallback (listings carry
+      no APN). A single DINS polygon can contain several addressed parcels
+      (overlapping geometry, shared condo parcels), so a containing polygon is
+      accepted only when exactly one candidate's street number equals the
+      record's; wrong-number hits and same-number ties resolve to ``None``
+      rather than guessing.
+    """
 
     by_apn: dict[str, str]
-    by_address: dict[str, str]
+    number_by_ain: dict[str, str]
+    ains: list[str]
+    geoms: list[BaseGeometry]
+    tree: STRtree | None
 
-    def match(self, assessor_id: str | None, address: str | None) -> str | None:
-        """Resolve an AIN by APN/assessor digits first, then street address."""
+    def match_apn(self, assessor_id: str | None) -> str | None:
+        """Resolve an AIN by APN / assessor digits."""
         if assessor_id:
-            ain = self.by_apn.get(_digits(assessor_id))
-            if ain:
-                return ain
-        if address:
-            ain = self.by_address.get(_norm_addr(address))
-            if ain:
-                return ain
+            return self.by_apn.get(_digits(assessor_id))
         return None
+
+    def match_point(
+        self,
+        longitude: float | None,
+        latitude: float | None,
+        number: str | None,
+    ) -> str | None:
+        """Resolve an AIN by point-in-polygon, requiring the street number match.
+
+        Returns an AIN only when exactly one parcel both contains the point and
+        shares ``number``. No containing-and-number match (wrong-parcel hit) or
+        more than one (same-number units in a shared polygon) → ``None``.
+        """
+        if self.tree is None or longitude is None or latitude is None or not number:
+            return None
+        point = Point(longitude, latitude)
+        matched = [
+            self.ains[int(i)]
+            for i in self.tree.query(point)
+            if self.geoms[int(i)].contains(point)
+            and self.number_by_ain.get(self.ains[int(i)]) == number
+        ]
+        return matched[0] if len(matched) == 1 else None
 
 
 def build_parcels_index(parcels: list[DinsParcel]) -> ParcelsIndex:
-    """Index DINS parcels by APN/AIN digits and normalized situs address."""
+    """Index DINS parcels by APN digits, street number, and polygon geometry."""
     by_apn: dict[str, str] = {}
-    by_address: dict[str, str] = {}
+    number_by_ain: dict[str, str] = {}
+    ains: list[str] = []
+    geoms: list[BaseGeometry] = []
     for parcel in parcels:
         ain = parcel["AIN_1"]
         by_apn[_digits(ain)] = ain
@@ -116,9 +166,21 @@ def build_parcels_index(parcels: list[DinsParcel]) -> ParcelsIndex:
         if apn:
             by_apn.setdefault(_digits(str(apn)), ain)
         addr = parcel.get("SitusFullAddress") or parcel.get("SitusAddress")
-        if addr:
-            by_address.setdefault(_norm_addr(str(addr)), ain)
-    return ParcelsIndex(by_apn=by_apn, by_address=by_address)
+        number = _street_number(_str_or_none(addr))
+        if number:
+            number_by_ain[ain] = number
+        geom = _parcel_polygon(parcel)
+        if geom is not None:
+            ains.append(ain)
+            geoms.append(geom)
+    tree = STRtree(geoms) if geoms else None
+    return ParcelsIndex(
+        by_apn=by_apn,
+        number_by_ain=number_by_ain,
+        ains=ains,
+        geoms=geoms,
+        tree=tree,
+    )
 
 
 def normalize_properties(
@@ -126,31 +188,34 @@ def normalize_properties(
     index: ParcelsIndex,
     *,
     cutoff: str = FIRE_CUTOFF,
+    unmatched: list[str] | None = None,
 ) -> dict[str, SaleInfo]:
     """Keep records that matched a parcel and sold strictly after ``cutoff``.
 
     Keyed by AIN; when several records map to one parcel the latest sale wins.
+    Records that don't resolve to a parcel append an identifier to ``unmatched``
+    (when provided) for info-level auditing; pre-fire sales are excluded but not
+    treated as unmatched.
     """
     out: dict[str, SaleInfo] = {}
     for rec in records:
         raw = dict(rec)
-        ain = index.match(
-            _str_or_none(raw.get("assessorID")),
-            _str_or_none(raw.get("formattedAddress")),
-        )
+        ain = _match_record(index, raw)
         if ain is None:
+            if unmatched is not None:
+                unmatched.append(_record_label(raw))
             continue
         sale_date = _date_str(raw.get("lastSaleDate"))
         if sale_date is None or sale_date[:10] <= cutoff:
             continue
         owner = raw.get("owner") or {}
         names = owner.get("names") if isinstance(owner, dict) else None
-        buyer = " & ".join(str(n) for n in names) if names else None
+        owner_name = " & ".join(str(n) for n in names) if names else None
         info = SaleInfo(
             ain=ain,
             sale_date=sale_date,
             sale_price=_int_or_none(raw.get("lastSalePrice")),
-            buyer_name=buyer,
+            owner_name=owner_name,
             owner_type=(owner.get("type") if isinstance(owner, dict) else None),
             owner_occupied=_bool_or_none(raw.get("ownerOccupied")),
         )
@@ -163,16 +228,21 @@ def normalize_properties(
 def normalize_listings(
     records: list[RentCastListing],
     index: ParcelsIndex,
+    *,
+    unmatched: list[str] | None = None,
 ) -> dict[str, ListingInfo]:
-    """Match active sale listings to parcels, keyed by AIN (latest listing wins)."""
+    """Match active sale listings to parcels, keyed by AIN (latest listing wins).
+
+    Records that don't resolve to a parcel append an identifier to ``unmatched``
+    (when provided) for info-level auditing.
+    """
     out: dict[str, ListingInfo] = {}
     for rec in records:
         raw = dict(rec)
-        ain = index.match(
-            _str_or_none(raw.get("assessorID")),
-            _str_or_none(raw.get("formattedAddress")),
-        )
+        ain = _match_record(index, raw)
         if ain is None:
+            if unmatched is not None:
+                unmatched.append(_record_label(raw))
             continue
         info = ListingInfo(
             ain=ain,
@@ -194,7 +264,7 @@ def apply_sales(results: list[ParcelResult], cache: SalesCache) -> None:
             result.sold_post_fire = True
             result.last_sale_date = sale.sale_date
             result.last_sale_price = sale.sale_price
-            result.buyer_name = sale.buyer_name
+            result.owner_name = sale.owner_name
             result.owner_type = sale.owner_type
             result.owner_occupied = sale.owner_occupied
         listing = cache.listings.get(result.ain)
@@ -261,7 +331,7 @@ def load_sales_cache(path: Path | str) -> SalesCache:
             ain=str(s["ain"]),
             sale_date=str(s["sale_date"]),
             sale_price=_int_or_none(s.get("sale_price")),
-            buyer_name=_str_or_none(s.get("buyer_name")),
+            owner_name=_str_or_none(s.get("owner_name")),
             owner_type=_str_or_none(s.get("owner_type")),
             owner_occupied=_bool_or_none(s.get("owner_occupied")),
         )
@@ -308,12 +378,52 @@ def save_sales_cache(path: Path | str, cache: SalesCache) -> None:
 # ---------- helpers ----------
 
 
+def _match_record(index: ParcelsIndex, raw: dict[str, Any]) -> str | None:
+    """APN first, then number-gated point-in-polygon on the record's coordinates."""
+    ain = index.match_apn(_str_or_none(raw.get("assessorID")))
+    if ain is not None:
+        return ain
+    longitude, latitude = _coords(raw)
+    number = _street_number(_str_or_none(raw.get("formattedAddress")))
+    return index.match_point(longitude, latitude, number)
+
+
+def _parcel_polygon(parcel: DinsParcel) -> BaseGeometry | None:
+    """DINS parcel polygon as a shapely geometry (mirrors spatial_aggregate)."""
+    geojson = esri_to_geojson(parcel.get("_geometry"))
+    if not geojson:
+        return None
+    try:
+        return shape(geojson)
+    except (ValueError, TypeError):
+        return None
+
+
+def _street_number(addr: str | None) -> str | None:
+    """Leading house number of an address ('411 PUNAHOU ST NO A' → '411')."""
+    if not addr:
+        return None
+    match = re.match(r"\s*(\d+)", addr)
+    return match.group(1) if match else None
+
+
+def _coords(raw: dict[str, Any]) -> tuple[float | None, float | None]:
+    """`(longitude, latitude)` from a raw RentCast record, floats or None."""
+    return _float_or_none(raw.get("longitude")), _float_or_none(raw.get("latitude"))
+
+
+def _record_label(raw: dict[str, Any]) -> str:
+    """A human identifier for a RentCast record that didn't join to a parcel."""
+    return (
+        _str_or_none(raw.get("formattedAddress"))
+        or _str_or_none(raw.get("assessorID"))
+        or _str_or_none(raw.get("id"))
+        or "<unidentified record>"
+    )
+
+
 def _digits(value: str) -> str:
     return re.sub(r"\D", "", value)
-
-
-def _norm_addr(value: str) -> str:
-    return re.sub(r"[^A-Z0-9]+", " ", value.upper()).strip()
 
 
 def _newer_listing(candidate: ListingInfo, existing: ListingInfo) -> bool:
@@ -332,6 +442,14 @@ def _int_or_none(value: Any) -> int | None:
         return None
     if isinstance(value, (int, float)):
         return int(value)
+    return None
+
+
+def _float_or_none(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
     return None
 
 

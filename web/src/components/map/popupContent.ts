@@ -107,7 +107,7 @@ export function buildPopupContent(props: ParcelProperties): HTMLElement {
     const price = money(props.last_sale_price);
     const soldDay = props.last_sale_date.slice(0, 10);
     addRow(grid, "Sold", price ? `${soldDay} · ${price}` : soldDay);
-    if (props.buyer_name) {
+    if (props.owner_name) {
       const occ =
         props.owner_occupied === true
           ? "owner-occupied"
@@ -115,7 +115,8 @@ export function buildPopupContent(props: ParcelProperties): HTMLElement {
             ? "absentee"
             : null;
       const detail = [props.owner_type, occ].filter(Boolean).join(", ");
-      addRow(grid, "Buyer", detail ? `${props.buyer_name} (${detail})` : props.buyer_name);
+      // User-facing label stays "Buyer" (the post-fire owner of record).
+      addRow(grid, "Buyer", detail ? `${props.owner_name} (${detail})` : props.owner_name);
     }
   }
   if (props.active_listing) {

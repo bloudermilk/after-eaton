@@ -11,6 +11,7 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 from altadata.processing.aggregate import count_parcels, property_sales_bucket
+from altadata.processing.geometry import circle_from_bounds, parcels_bounding_envelope
 from altadata.processing.normalize import BsdStatus, DamageLevel
 from altadata.processing.parcel_analysis import ParcelResult
 from altadata.processing.sales import (
@@ -103,6 +104,36 @@ def test_fetch_404_is_empty_not_error(
     assert fetch_rentcast_properties(34.19, -118.13, 2.5, sale_date_range=7) == []
 
 
+# --- query circle scoped to the parcel population --------------------------
+
+
+def _parcel_with_ring(ring: list[list[float]]) -> dict[str, Any]:
+    return {"_geometry": {"rings": [ring]}}
+
+
+def test_parcels_bounding_envelope_spans_all_parcels() -> None:
+    parcels = [
+        _parcel_with_ring(
+            [[-118.16, 34.17], [-118.15, 34.17], [-118.15, 34.18], [-118.16, 34.18]]
+        ),
+        _parcel_with_ring(
+            [[-118.10, 34.20], [-118.09, 34.20], [-118.09, 34.21], [-118.10, 34.21]]
+        ),
+    ]
+    env = parcels_bounding_envelope(parcels)  # type: ignore[arg-type]
+    assert tuple(round(v, 2) for v in env) == (-118.16, 34.17, -118.09, 34.21)
+
+    # The covering circle centers on the box and reaches every corner.
+    lat, lon, radius = circle_from_bounds(env)
+    assert (round(lat, 3), round(lon, 3)) == (34.19, -118.125)
+    assert radius > 0
+
+
+def test_parcels_bounding_envelope_raises_without_geometry() -> None:
+    with pytest.raises(ValueError):
+        parcels_bounding_envelope([{"AIN_1": "x"}])  # type: ignore[arg-type,list-item]
+
+
 # --- matching + normalization ---------------------------------------------
 
 
@@ -118,17 +149,72 @@ def _dins(ain: str, apn: str, address: str) -> dict[str, Any]:
     }
 
 
-def test_match_by_apn_then_address() -> None:
+def _square(lon: float, lat: float, half: float = 0.0005) -> list[list[float]]:
+    """A small closed square ring (Esri order) centered on `(lon, lat)`."""
+    return [
+        [lon - half, lat - half],
+        [lon + half, lat - half],
+        [lon + half, lat + half],
+        [lon - half, lat + half],
+        [lon - half, lat - half],
+    ]
+
+
+def _dins_geo(
+    ain: str, apn: str, address: str, center: tuple[float, float]
+) -> dict[str, Any]:
+    """A DINS parcel with a square polygon around `center` for point matching."""
+    parcel = _dins(ain, apn, address)
+    parcel["_geometry"] = {"rings": [_square(*center)]}
+    return parcel
+
+
+def test_match_by_apn_then_point() -> None:
+    center = (-118.13, 34.19)
     parcels = [
-        _dins("5841009012", "5841-009-012", "411 PUNAHOU ST ALTADENA CA 91001"),
+        _dins_geo(
+            "5841009012", "5841-009-012", "411 PUNAHOU ST ALTADENA CA 91001", center
+        )
     ]
     index = build_parcels_index(parcels)  # type: ignore[arg-type]
-    # Dashed APN → digits match.
-    assert index.match("5841-009-012", None) == "5841009012"
-    # Address with different punctuation/case still matches after normalization.
-    assert index.match(None, "411 Punahou St, Altadena, CA 91001") == "5841009012"
-    # No signal → no match.
-    assert index.match("0000000000", "999 Nowhere Rd") is None
+    # Dashed APN → digits match (primary path, no geometry needed).
+    assert index.match_apn("5841-009-012") == "5841009012"
+    assert index.match_apn(None) is None
+    assert index.match_apn("0000000000") is None
+    # Point inside the parcel WITH a matching street number → match.
+    assert index.match_point(-118.13, 34.19, "411") == "5841009012"
+    # Point outside every parcel → no match.
+    assert index.match_point(-117.0, 34.0, "411") is None
+    # Inside the parcel but the street number differs → rejected (false-positive guard).
+    assert index.match_point(-118.13, 34.19, "999") is None
+    # Inside but no number to check against → cannot satisfy the requirement.
+    assert index.match_point(-118.13, 34.19, None) is None
+
+
+def test_match_point_disambiguates_overlapping_parcels() -> None:
+    # Two parcels share one polygon (real DINS condo case) but have different
+    # street numbers; the number component selects the right AIN.
+    center = (-118.13, 34.19)
+    parcels = [
+        _dins_geo("5751021042", "5751-021-042", "1501 CREEKSIDE CT NO A", center),
+        _dins_geo("5751021044", "5751-021-044", "1503 CREEKSIDE CT NO A", center),
+    ]
+    index = build_parcels_index(parcels)  # type: ignore[arg-type]
+    assert index.match_point(-118.13, 34.19, "1501") == "5751021042"
+    assert index.match_point(-118.13, 34.19, "1503") == "5751021044"
+    # A number neither parcel carries → no match.
+    assert index.match_point(-118.13, 34.19, "1502") is None
+
+
+def test_match_point_ambiguous_same_number_returns_none() -> None:
+    # Condo units A/B sharing a polygon share the street number → unresolvable.
+    center = (-118.13, 34.19)
+    parcels = [
+        _dins_geo("5751021042", "5751-021-042", "1501 CREEKSIDE CT NO A", center),
+        _dins_geo("5751021043", "5751-021-043", "1501 CREEKSIDE CT NO B", center),
+    ]
+    index = build_parcels_index(parcels)  # type: ignore[arg-type]
+    assert index.match_point(-118.13, 34.19, "1501") is None
 
 
 def test_normalize_properties_filters_pre_fire_and_carries_owner() -> None:
@@ -163,17 +249,66 @@ def test_normalize_properties_filters_pre_fire_and_carries_owner() -> None:
     info = sold["5841009012"]
     assert info.sale_date.startswith("2025-03-14")
     assert info.sale_price == 1250000
-    assert info.buyer_name == "ACME HOMES LLC"
+    assert info.owner_name == "ACME HOMES LLC"
     assert info.owner_type == "Organization"
     assert info.owner_occupied is False
 
 
-def test_normalize_listings_matches_active() -> None:
+def test_normalize_properties_reports_unmatched() -> None:
+    # A matched post-fire sale, a matched PRE-fire sale (excluded but NOT
+    # unmatched), and a genuine non-match (appended to unmatched).
     parcels = [_dins("5841009012", "5841-009-012", "411 PUNAHOU ST ALTADENA CA 91001")]
     index = build_parcels_index(parcels)  # type: ignore[arg-type]
     records = [
         {
+            "assessorID": "5841-009-012",
             "formattedAddress": "411 Punahou St, Altadena, CA 91001",
+            "lastSaleDate": "2025-03-14",
+        },
+        {  # matches a parcel but sold before the fire → excluded, not unmatched
+            "assessorID": "5841-009-012",
+            "formattedAddress": "411 Punahou St, Altadena, CA 91001",
+            "lastSaleDate": "2019-06-01",
+        },
+        {"assessorID": "0000-000-000", "formattedAddress": "1 Nowhere Rd"},
+    ]
+    unmatched: list[str] = []
+    sold = normalize_properties(records, index, unmatched=unmatched)  # type: ignore[arg-type]
+    assert set(sold) == {"5841009012"}
+    assert unmatched == ["1 Nowhere Rd"]
+
+
+def test_normalize_listings_reports_unmatched() -> None:
+    parcels = [_dins("5841009012", "5841-009-012", "411 PUNAHOU ST ALTADENA CA 91001")]
+    index = build_parcels_index(parcels)  # type: ignore[arg-type]
+    records = [
+        {"formattedAddress": "1 Nowhere Rd", "status": "Active"},
+        # No address and no assessorID match → labeled by assessorID.
+        {"assessorID": "9999-999-999", "status": "Active"},
+    ]
+    unmatched: list[str] = []
+    listings = normalize_listings(records, index, unmatched=unmatched)  # type: ignore[arg-type]
+    assert listings == {}
+    assert unmatched == ["1 Nowhere Rd", "9999-999-999"]
+
+
+def test_normalize_listings_matches_active() -> None:
+    # Listings carry no assessorID → matched by point-in-polygon on lat/long,
+    # gated on the street number.
+    parcels = [
+        _dins_geo(
+            "5841009012",
+            "5841-009-012",
+            "411 PUNAHOU ST ALTADENA CA 91001",
+            (-118.13, 34.19),
+        )
+    ]
+    index = build_parcels_index(parcels)  # type: ignore[arg-type]
+    records = [
+        {
+            "formattedAddress": "411 Punahou St, Altadena, CA 91001",
+            "latitude": 34.19,
+            "longitude": -118.13,
             "listedDate": "2026-05-01T00:00:00.000Z",
             "status": "Active",
             "price": 999000,
@@ -185,6 +320,32 @@ def test_normalize_listings_matches_active() -> None:
     assert listings["5841009012"].price == 999000
 
 
+def test_normalize_listings_wrong_number_is_unmatched() -> None:
+    # Geocoded point lands inside the parcel polygon, but the listing's street
+    # number disagrees → treated as unmatched (never mis-assigned).
+    parcels = [
+        _dins_geo(
+            "5841009012",
+            "5841-009-012",
+            "411 PUNAHOU ST ALTADENA CA 91001",
+            (-118.13, 34.19),
+        )
+    ]
+    index = build_parcels_index(parcels)  # type: ignore[arg-type]
+    records = [
+        {
+            "formattedAddress": "999 Elsewhere Ave, Altadena, CA 91001",
+            "latitude": 34.19,
+            "longitude": -118.13,
+            "status": "Active",
+        }
+    ]
+    unmatched: list[str] = []
+    listings = normalize_listings(records, index, unmatched=unmatched)  # type: ignore[arg-type]
+    assert listings == {}
+    assert unmatched == ["999 Elsewhere Ave, Altadena, CA 91001"]
+
+
 def test_apply_sales_overlays_fields() -> None:
     result = _result("5841009012", bsd_status=BsdStatus.RED)
     cache = SalesCache(
@@ -193,7 +354,7 @@ def test_apply_sales_overlays_fields() -> None:
                 ain="5841009012",
                 sale_date="2025-03-14",
                 sale_price=1250000,
-                buyer_name="JANE DOE",
+                owner_name="JANE DOE",
                 owner_type="Individual",
                 owner_occupied=True,
             )
@@ -211,7 +372,7 @@ def test_apply_sales_overlays_fields() -> None:
 
     assert result.sold_post_fire is True
     assert result.last_sale_date == "2025-03-14"
-    assert result.buyer_name == "JANE DOE"
+    assert result.owner_name == "JANE DOE"
     assert result.owner_occupied is True
     assert result.active_listing is True
     assert result.listing_date == "2026-05-01"

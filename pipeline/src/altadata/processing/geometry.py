@@ -12,6 +12,8 @@ Two related concerns live here so they share a single source of truth:
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from shapely.geometry import Point, Polygon
 
@@ -38,6 +40,23 @@ def dins_polygon_centroid(dins: DinsParcel) -> Point | None:
     return max(polygons, key=lambda p: p.area).centroid
 
 
+def _rings_envelope(
+    records: Iterable[Mapping[str, Any]],
+) -> tuple[float, float, float, float] | None:
+    """`(xmin, ymin, xmax, ymax)` over every `_geometry.rings` point, or None."""
+    xs: list[float] = []
+    ys: list[float] = []
+    for rec in records:
+        geom = rec.get("_geometry") or {}
+        for ring in geom.get("rings") or []:
+            for point in ring:
+                xs.append(float(point[0]))
+                ys.append(float(point[1]))
+    if not xs:
+        return None
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
 def bounding_envelope(
     perimeter: list[FirePerimeter],
 ) -> tuple[float, float, float, float]:
@@ -46,17 +65,27 @@ def bounding_envelope(
     Used to bound the EPIC-LA Case History query to the burn area so we never
     page the county-wide history. Raises if no polygon geometry is present.
     """
-    xs: list[float] = []
-    ys: list[float] = []
-    for rec in perimeter:
-        geom = rec.get("_geometry") or {}
-        for ring in geom.get("rings") or []:
-            for point in ring:
-                xs.append(float(point[0]))
-                ys.append(float(point[1]))
-    if not xs:
+    env = _rings_envelope(perimeter)
+    if env is None:
         raise ValueError("perimeter has no polygon geometry to bound")
-    return (min(xs), min(ys), max(xs), max(ys))
+    return env
+
+
+def parcels_bounding_envelope(
+    parcels: list[DinsParcel],
+) -> tuple[float, float, float, float]:
+    """Return `(xmin, ymin, xmax, ymax)` spanning all DINS parcel polygons.
+
+    Scopes the RentCast area query to the Altadena parcel population
+    (COMMUNITY = 'Altadena') instead of the full Eaton fire perimeter, which
+    extends miles east into unpopulated foothills. Every parcel a sale/listing
+    can join back to lies in this box, so the covering circle stays tight while
+    still reaching every parcel. Raises if no parcel carries geometry.
+    """
+    env = _rings_envelope(parcels)
+    if env is None:
+        raise ValueError("DINS parcels have no polygon geometry to bound")
+    return env
 
 
 def circle_from_bounds(

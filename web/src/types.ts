@@ -111,7 +111,7 @@ export interface ParcelProperties {
   sold_post_fire: boolean;
   last_sale_date: string | null;
   last_sale_price: number | null;
-  buyer_name: string | null;
+  owner_name: string | null;
   owner_type: string | null;
   owner_occupied: boolean | null;
   active_listing: boolean;

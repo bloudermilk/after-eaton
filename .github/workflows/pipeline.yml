@@ -100,8 +100,6 @@ jobs:
             data/source-fire-perimeter.json
             data/source-2020-census-tracts.json
             data/source-2020-census-block-groups.json
-            data/source-rentcast-properties.json
-            data/source-rentcast-sale-listings.json
           )
 
           gh release view "$tag" >/dev/null 2>&1 \

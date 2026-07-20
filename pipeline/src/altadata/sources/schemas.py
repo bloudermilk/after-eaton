@@ -140,13 +140,17 @@ class RentCastProperty(TypedDict, total=False):
     """A RentCast property record (GET /properties).
 
     Only the fields the sales feature reads are typed; RentCast returns many
-    more. `assessorID` is LA County's APN for the parcel (used to join back to
-    DINS by AIN); `owner`/`lastSaleDate` supply the post-fire buyer + sale date.
+    more. `assessorID` is LA County's APN (primary join back to DINS by AIN);
+    `latitude`/`longitude` (WGS84) are the point-in-polygon fallback join;
+    `owner`/`lastSaleDate` supply the post-fire owner of record (the buyer) +
+    sale date.
     """
 
     id: NotRequired[str | None]
     formattedAddress: NotRequired[str | None]
     assessorID: NotRequired[str | None]
+    latitude: NotRequired[float | None]
+    longitude: NotRequired[float | None]
     lastSaleDate: NotRequired[str | None]
     lastSalePrice: NotRequired[float | int | None]
     ownerOccupied: NotRequired[bool | None]
@@ -156,13 +160,16 @@ class RentCastProperty(TypedDict, total=False):
 class RentCastListing(TypedDict, total=False):
     """A RentCast sale listing (GET /listings/sale).
 
-    `listedDate` + `status` answer "actively listed, and since when"; the
-    address (and `assessorID` when present) join it back to a DINS parcel.
+    `listedDate` + `status` answer "actively listed, and since when". Listings
+    carry no `assessorID`, so `latitude`/`longitude` (WGS84) are the join key —
+    point-in-polygon against DINS parcels, gated on the street number.
     """
 
     id: NotRequired[str | None]
     formattedAddress: NotRequired[str | None]
     assessorID: NotRequired[str | None]
+    latitude: NotRequired[float | None]
+    longitude: NotRequired[float | None]
     listedDate: NotRequired[str | None]
     status: NotRequired[str | None]
     price: NotRequired[float | int | None]

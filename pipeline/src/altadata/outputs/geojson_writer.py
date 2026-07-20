@@ -123,7 +123,7 @@ def _to_compact_feature(
         "sold_post_fire": result.sold_post_fire,
         "last_sale_date": result.last_sale_date,
         "last_sale_price": result.last_sale_price,
-        "buyer_name": result.buyer_name,
+        "owner_name": result.owner_name,
         "owner_type": result.owner_type,
         "owner_occupied": result.owner_occupied,
         "active_listing": result.active_listing,

@@ -125,12 +125,13 @@ class ParcelResult:
     # Real-estate sales activity from RentCast (see processing/sales.py). These
     # are overlaid AFTER analyze_parcel by `apply_sales`, so they default to
     # "no activity" and analyze_parcel never sets them. `sold_post_fire` means a
-    # sale recorded strictly after the fire (FIRE_CUTOFF); the current owner is
-    # the buyer. `active_listing` means an active RentCast sale listing matched.
+    # sale recorded strictly after the fire (FIRE_CUTOFF); `owner_*` is the
+    # post-fire owner of record (the buyer). `active_listing` means an active
+    # RentCast sale listing matched.
     sold_post_fire: bool = False
     last_sale_date: str | None = None
     last_sale_price: int | None = None
-    buyer_name: str | None = None
+    owner_name: str | None = None
     owner_type: str | None = None
     owner_occupied: bool | None = None
     active_listing: bool = False

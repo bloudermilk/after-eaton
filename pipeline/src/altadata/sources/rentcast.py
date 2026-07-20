@@ -69,8 +69,9 @@ def fetch_rentcast_properties(
 ) -> list[RentCastProperty]:
     """Fetch properties in the area last sold within ``sale_date_range`` days.
 
-    Each record carries the current owner (the post-fire buyer), ``lastSaleDate``,
-    ``lastSalePrice`` and ``assessorID`` for the local join.
+    Each record carries the current owner (the post-fire owner of record, i.e.
+    the buyer), ``lastSaleDate``, ``lastSalePrice`` and ``assessorID`` for the
+    local join.
     """
     params = {
         "latitude": _fmt(latitude),

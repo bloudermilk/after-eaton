@@ -27,7 +27,11 @@ from .processing.extraction_compare import (
     extraction_metrics,
     override_with_llm,
 )
-from .processing.geometry import bounding_envelope, circle_from_bounds
+from .processing.geometry import (
+    bounding_envelope,
+    circle_from_bounds,
+    parcels_bounding_envelope,
+)
 from .processing.join import JoinedParcel, join_cases_to_parcels
 from .processing.llm_extraction import (
     ExtractionCache,
@@ -74,7 +78,7 @@ from .sources.rentcast import (
     fetch_rentcast_properties,
     fetch_rentcast_sale_listings,
 )
-from .sources.schemas import DinsParcel, EpicCase, FirePerimeter
+from .sources.schemas import DinsParcel, EpicCase
 
 logger = logging.getLogger("altadata")
 
@@ -282,9 +286,7 @@ def run(
         enabled=rentcast,
         full_refresh=rentcast_full_refresh,
         parcels=parcels,
-        perimeter=perimeter,
         cache_path=sales_cache_path,
-        out_dir=out_dir,
         generated_at=generated_at,
     )
     apply_sales(results, sales_cache)
@@ -374,22 +376,19 @@ def _collect_sales(
     enabled: bool,
     full_refresh: bool,
     parcels: list[DinsParcel],
-    perimeter: list[FirePerimeter],
     cache_path: Path,
-    out_dir: Path,
     generated_at: str,
 ) -> tuple[SalesCache, list[RecordWarning]]:
     """Fetch RentCast sales/listings, upsert into the cache, and return it.
 
-    Never raises: RentCast is supplementary, so a missing key or fetch failure
-    logs a warning and falls back to the last-good cache (empty on a cold start),
-    so the daily release always publishes. The returned warnings surface in the
-    QC report.
+    Never raises: RentCast is a *service*, not a published source (its raw
+    responses are not part of the data contract — see the module docstring in
+    ``processing.sales``). A missing key or fetch failure logs a warning and
+    falls back to the last-good cache (empty on a cold start), so the daily
+    release always publishes. The returned warnings surface in the QC report.
     """
     cache = load_sales_cache(cache_path)
     warnings: list[RecordWarning] = []
-    props: list[Any] = []
-    listings: list[Any] = []
 
     if not enabled:
         warnings.append(
@@ -412,7 +411,9 @@ def _collect_sales(
     else:
         try:
             index = build_parcels_index(parcels)
-            lat, lon, radius = circle_from_bounds(bounding_envelope(perimeter))
+            # Scope the area query to the Altadena parcel population, not the fire
+            # perimeter (which reaches miles east into unpopulated foothills).
+            lat, lon, radius = circle_from_bounds(parcels_bounding_envelope(parcels))
             # Full since-fire sweep on a cold cache, when forced, or when the
             # periodic reconcile is due; otherwise the cheap rolling window.
             do_full = (
@@ -442,9 +443,13 @@ def _collect_sales(
                 len(listings),
             )
 
-            new_sold = normalize_properties(props, index)
+            unmatched_sales: list[str] = []
+            unmatched_listings: list[str] = []
+            new_sold = normalize_properties(props, index, unmatched=unmatched_sales)
             cache.sold.update(new_sold)
-            cache.listings = normalize_listings(listings, index)
+            cache.listings = normalize_listings(
+                listings, index, unmatched=unmatched_listings
+            )
             cache.backfill_done = True
             cache.generated_at = generated_at
             if do_full:
@@ -472,6 +477,31 @@ def _collect_sales(
                         severity="data",
                     )
                 )
+
+            # Info-level audit of the individual records that didn't join to a
+            # parcel. Address→AIN matching is exact-after-normalization (no USPS
+            # canonicalization), and listings carry no assessorID, so some
+            # non-matches are expected (out-of-set homes, unit-designator
+            # differences). `ain="*"` because a non-match has no AIN by
+            # definition; these are info-severity so they never gate the run.
+            for label in unmatched_sales:
+                warnings.append(
+                    RecordWarning(
+                        ain="*",
+                        code="rentcast_unmatched_sale",
+                        detail=f"post-fire sale did not join to a parcel: {label}",
+                        severity="info",
+                    )
+                )
+            for label in unmatched_listings:
+                warnings.append(
+                    RecordWarning(
+                        ain="*",
+                        code="rentcast_unmatched_listing",
+                        detail=f"active listing did not join to a parcel: {label}",
+                        severity="info",
+                    )
+                )
         except RentCastError as exc:
             logger.warning("RentCast fetch failed (%s); reusing cached sales", exc)
             warnings.append(
@@ -482,21 +512,6 @@ def _collect_sales(
                     severity="data",
                 )
             )
-
-    # Always snapshot the raw pulls (empty when disabled/failed) so the published
-    # release + audit trail carry a RentCast source file every run.
-    write_raw_records(
-        cast(list[dict[str, Any]], props),
-        out_dir / "source-rentcast-properties.json",
-        source_name="RentCast /properties",
-        fetched_at=generated_at,
-    )
-    write_raw_records(
-        cast(list[dict[str, Any]], listings),
-        out_dir / "source-rentcast-sale-listings.json",
-        source_name="RentCast /listings/sale",
-        fetched_at=generated_at,
-    )
 
     return cache, warnings
 
