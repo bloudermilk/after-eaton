@@ -134,12 +134,17 @@ class ParcelsIndex:
         longitude: float | None,
         latitude: float | None,
         number: str | None,
+        *,
+        ambiguous: list[str] | None = None,
     ) -> str | None:
         """Resolve an AIN by point-in-polygon, requiring the street number match.
 
         Returns an AIN only when exactly one parcel both contains the point and
-        shares ``number``. No containing-and-number match (wrong-parcel hit) or
-        more than one (same-number units in a shared polygon) → ``None``.
+        shares ``number``. No containing-and-number match (wrong-parcel hit)
+        → ``None``. More than one (same-number units in a shared polygon) →
+        ``None`` as well, but the tied candidate AINs are appended to
+        ``ambiguous`` (when provided) so the caller can distinguish an
+        unresolvable tie from a plain no-match.
         """
         if self.tree is None or longitude is None or latitude is None or not number:
             return None
@@ -150,7 +155,11 @@ class ParcelsIndex:
             if self.geoms[int(i)].contains(point)
             and self.number_by_ain.get(self.ains[int(i)]) == number
         ]
-        return matched[0] if len(matched) == 1 else None
+        if len(matched) == 1:
+            return matched[0]
+        if len(matched) > 1 and ambiguous is not None:
+            ambiguous.extend(matched)
+        return None
 
 
 def build_parcels_index(parcels: list[DinsParcel]) -> ParcelsIndex:
@@ -189,22 +198,24 @@ def normalize_properties(
     *,
     cutoff: str = FIRE_CUTOFF,
     unmatched: list[str] | None = None,
+    ambiguous: list[str] | None = None,
 ) -> dict[str, SaleInfo]:
     """Keep records that matched a parcel and sold strictly after ``cutoff``.
 
     Keyed by AIN; when several records map to one parcel the latest sale wins.
-    Records that don't resolve to a parcel append an identifier to ``unmatched``
-    (when provided) for info-level auditing; pre-fire sales are excluded but not
-    treated as unmatched.
+    Records that don't resolve to a parcel append an identifier to ``unmatched``,
+    except point-in-polygon ties (several same-number parcels share a polygon),
+    which append to ``ambiguous`` instead — both for info-level auditing.
+    Pre-fire sales are excluded but not treated as unmatched.
     """
     out: dict[str, SaleInfo] = {}
     for rec in records:
         raw = dict(rec)
-        ain = _match_record(index, raw)
-        if ain is None:
-            if unmatched is not None:
-                unmatched.append(_record_label(raw))
+        outcome = _match_record(index, raw)
+        if outcome.ain is None:
+            _record_no_match(raw, outcome, unmatched=unmatched, ambiguous=ambiguous)
             continue
+        ain = outcome.ain
         sale_date = _date_str(raw.get("lastSaleDate"))
         if sale_date is None or sale_date[:10] <= cutoff:
             continue
@@ -230,20 +241,22 @@ def normalize_listings(
     index: ParcelsIndex,
     *,
     unmatched: list[str] | None = None,
+    ambiguous: list[str] | None = None,
 ) -> dict[str, ListingInfo]:
     """Match active sale listings to parcels, keyed by AIN (latest listing wins).
 
-    Records that don't resolve to a parcel append an identifier to ``unmatched``
-    (when provided) for info-level auditing.
+    Records that don't resolve to a parcel append an identifier to ``unmatched``,
+    except point-in-polygon ties (several same-number parcels share a polygon),
+    which append to ``ambiguous`` instead — both for info-level auditing.
     """
     out: dict[str, ListingInfo] = {}
     for rec in records:
         raw = dict(rec)
-        ain = _match_record(index, raw)
-        if ain is None:
-            if unmatched is not None:
-                unmatched.append(_record_label(raw))
+        outcome = _match_record(index, raw)
+        if outcome.ain is None:
+            _record_no_match(raw, outcome, unmatched=unmatched, ambiguous=ambiguous)
             continue
+        ain = outcome.ain
         info = ListingInfo(
             ain=ain,
             listed_date=_date_str(raw.get("listedDate")),
@@ -378,14 +391,50 @@ def save_sales_cache(path: Path | str, cache: SalesCache) -> None:
 # ---------- helpers ----------
 
 
-def _match_record(index: ParcelsIndex, raw: dict[str, Any]) -> str | None:
+@dataclass(frozen=True)
+class MatchResult:
+    """Outcome of resolving a RentCast record to a parcel.
+
+    ``ambiguous_ains`` is non-empty only when point-in-polygon found more than
+    one same-number candidate (e.g. condo units sharing a polygon) and declined
+    to guess — distinct from a plain no-match, which the caller surfaces
+    differently.
+    """
+
+    ain: str | None
+    ambiguous_ains: tuple[str, ...] = ()
+
+
+def _match_record(index: ParcelsIndex, raw: dict[str, Any]) -> MatchResult:
     """APN first, then number-gated point-in-polygon on the record's coordinates."""
     ain = index.match_apn(_str_or_none(raw.get("assessorID")))
     if ain is not None:
-        return ain
+        return MatchResult(ain=ain)
     longitude, latitude = _coords(raw)
     number = _street_number(_str_or_none(raw.get("formattedAddress")))
-    return index.match_point(longitude, latitude, number)
+    tie: list[str] = []
+    ain = index.match_point(longitude, latitude, number, ambiguous=tie)
+    return MatchResult(ain=ain, ambiguous_ains=tuple(tie))
+
+
+def _ambiguity_label(raw: dict[str, Any], ains: tuple[str, ...]) -> str:
+    """Identify an ambiguous record plus the parcels it couldn't be split between."""
+    return f"{_record_label(raw)} (candidate parcels: {', '.join(ains)})"
+
+
+def _record_no_match(
+    raw: dict[str, Any],
+    outcome: MatchResult,
+    *,
+    unmatched: list[str] | None,
+    ambiguous: list[str] | None,
+) -> None:
+    """Route a failed match to the ambiguous or the plain-unmatched audit list."""
+    if outcome.ambiguous_ains:
+        if ambiguous is not None:
+            ambiguous.append(_ambiguity_label(raw, outcome.ambiguous_ains))
+    elif unmatched is not None:
+        unmatched.append(_record_label(raw))
 
 
 def _parcel_polygon(parcel: DinsParcel) -> BaseGeometry | None:

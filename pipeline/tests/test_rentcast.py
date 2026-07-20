@@ -346,6 +346,35 @@ def test_normalize_listings_wrong_number_is_unmatched() -> None:
     assert unmatched == ["999 Elsewhere Ave, Altadena, CA 91001"]
 
 
+def test_normalize_listings_reports_ambiguous_separately() -> None:
+    # The listing's point lands in two same-number condo parcels sharing a
+    # polygon → unresolvable → routed to `ambiguous`, NOT `unmatched`, with the
+    # tied parcel AINs in the label.
+    center = (-118.13, 34.19)
+    parcels = [
+        _dins_geo("5751021042", "5751-021-042", "1501 CREEKSIDE CT NO A", center),
+        _dins_geo("5751021043", "5751-021-043", "1501 CREEKSIDE CT NO B", center),
+    ]
+    index = build_parcels_index(parcels)  # type: ignore[arg-type]
+    records = [
+        {
+            "formattedAddress": "1501 Creekside Ct, Pasadena, CA 91107",
+            "latitude": 34.19,
+            "longitude": -118.13,
+            "status": "Active",
+        }
+    ]
+    unmatched: list[str] = []
+    ambiguous: list[str] = []
+    listings = normalize_listings(  # type: ignore[arg-type]
+        records, index, unmatched=unmatched, ambiguous=ambiguous
+    )
+    assert listings == {}
+    assert unmatched == []  # not a plain non-match
+    assert len(ambiguous) == 1
+    assert "5751021042" in ambiguous[0] and "5751021043" in ambiguous[0]
+
+
 def test_apply_sales_overlays_fields() -> None:
     result = _result("5841009012", bsd_status=BsdStatus.RED)
     cache = SalesCache(

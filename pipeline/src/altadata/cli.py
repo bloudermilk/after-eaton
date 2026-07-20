@@ -445,10 +445,17 @@ def _collect_sales(
 
             unmatched_sales: list[str] = []
             unmatched_listings: list[str] = []
-            new_sold = normalize_properties(props, index, unmatched=unmatched_sales)
+            ambiguous_sales: list[str] = []
+            ambiguous_listings: list[str] = []
+            new_sold = normalize_properties(
+                props, index, unmatched=unmatched_sales, ambiguous=ambiguous_sales
+            )
             cache.sold.update(new_sold)
             cache.listings = normalize_listings(
-                listings, index, unmatched=unmatched_listings
+                listings,
+                index,
+                unmatched=unmatched_listings,
+                ambiguous=ambiguous_listings,
             )
             cache.backfill_done = True
             cache.generated_at = generated_at
@@ -499,6 +506,29 @@ def _collect_sales(
                         ain="*",
                         code="rentcast_unmatched_listing",
                         detail=f"active listing did not join to a parcel: {label}",
+                        severity="info",
+                    )
+                )
+
+            # Point-in-polygon ties: the record's coordinates land in several
+            # same-number parcels sharing a polygon (e.g. condo A/B), so we can't
+            # pick one and leave it unmatched. Surfaced separately from the plain
+            # non-matches above so the reason is auditable.
+            for label in ambiguous_sales:
+                warnings.append(
+                    RecordWarning(
+                        ain="*",
+                        code="rentcast_ambiguous_sale",
+                        detail=f"ambiguous post-fire sale, not joined: {label}",
+                        severity="info",
+                    )
+                )
+            for label in ambiguous_listings:
+                warnings.append(
+                    RecordWarning(
+                        ain="*",
+                        code="rentcast_ambiguous_listing",
+                        detail=f"ambiguous active listing, not joined: {label}",
                         severity="info",
                     )
                 )
