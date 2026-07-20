@@ -59,6 +59,24 @@ function addRow(grid: HTMLElement, label: string, value: string): void {
   grid.append(el("dt", undefined, label), el("dd", undefined, value));
 }
 
+// The two earliest rebuild milestones (stages 1–2). New-building permits — and
+// so the new_construction funnel card — only ever carry stages 3–7, so these
+// have no card and are named here; stages 3–7 reuse the card's bucket labels
+// (below) so the popup never drifts from it.
+const EARLY_REBUILD_STAGES: readonly { stage: number; label: string }[] = [
+  { stage: 1, label: "Application received" },
+  { stage: 2, label: "Zoning cleared" },
+];
+
+/** All seven rebuild milestones as {stage, label}, in lifecycle order (1→7). */
+function rebuildStageLabels(): { stage: number; label: string }[] {
+  const funnel = (getMetric("new_construction")?.buckets ?? []).map((b) => ({
+    stage: b.stage ?? 0,
+    label: b.label,
+  }));
+  return [...EARLY_REBUILD_STAGES, ...funnel];
+}
+
 export function buildPopupContent(props: ParcelProperties): HTMLElement {
   const root = el("div", "parcel-popup__body");
 
@@ -73,15 +91,22 @@ export function buildPopupContent(props: ParcelProperties): HTMLElement {
   const bsdLabel = BSD_LABELS[props.bsd_status];
   addRow(grid, "Damage", bsdLabel ? `${damageLabel} · ${bsdLabel}` : damageLabel);
 
-  // Rebuild milestones reached, in funnel order. The new-construction funnel is
-  // monotonic (stages 3–7 → "Plans received" … "Completed"), so a parcel at
-  // `rebuild_new_stage` has also reached every earlier milestone — list them all
-  // up to the furthest. Stage 0 means no new-building permit has reached plan
-  // check yet, so nothing has started.
-  const milestones = (getMetric("new_construction")?.buckets ?? [])
-    .filter((b) => (b.stage ?? 0) <= props.rebuild_new_stage)
-    .map((b) => b.label);
-  addRow(grid, "Rebuild", milestones.length > 0 ? milestones.join(", ") : "Not started");
+  // Rebuild milestones reached, in lifecycle order. We read the ALL-workclass
+  // `rebuild_stage` (0–7), not `rebuild_new_stage` (new-building only, 3–7),
+  // which would miss parcels rebuilding via repair or other permits — and so
+  // would show "Not started" for a parcel the map colors "Started". The funnel
+  // is monotonic, so list every milestone up to the furthest reached. A
+  // "Started" parcel whose active case hasn't reached even stage 1 still reads
+  // "Started" rather than "Not started", staying consistent with its dot.
+  const reached = rebuildStageLabels()
+    .filter((s) => s.stage <= props.rebuild_stage)
+    .map((s) => s.label);
+  const rebuildValue = reached.length
+    ? reached.join(", ")
+    : props.rebuild_progress_bucket === "rebuilding"
+      ? "Started"
+      : "Not started";
+  addRow(grid, "Rebuild", rebuildValue);
 
   // Pre → post structure figures (post is null until a rebuild permit is filed).
   // Counts and sizes are paired per dwelling type: SFRs then ADUs.
