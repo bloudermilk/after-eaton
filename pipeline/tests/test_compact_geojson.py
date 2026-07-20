@@ -193,6 +193,18 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "added_adu_count",
         "damage",
         "bsd_status",
+        # Post-fire real-estate activity (RentCast).
+        "property_sales_bucket",
+        "sold_post_fire",
+        "last_sale_date",
+        "last_sale_price",
+        "owner_name",
+        "owner_type",
+        "owner_occupied",
+        "active_listing",
+        "listing_date",
+        "listing_status",
+        "listing_price",
     }
     assert feat["properties"] == {
         "ain": "p1",
@@ -223,6 +235,19 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         # _result fixes damage=DESTROYED and defaults bsd_status to RED.
         "damage": "destroyed",
         "bsd_status": "red",
+        # _result has no RentCast overlay → no sale/listing activity. RED + no
+        # activity ⇒ property_sales_bucket "none".
+        "property_sales_bucket": "none",
+        "sold_post_fire": False,
+        "last_sale_date": None,
+        "last_sale_price": None,
+        "owner_name": None,
+        "owner_type": None,
+        "owner_occupied": None,
+        "active_listing": False,
+        "listing_date": None,
+        "listing_status": None,
+        "listing_price": None,
     }
 
 

@@ -40,6 +40,16 @@ function dash(value: number | null | undefined): string {
   return value == null ? "—" : value.toLocaleString();
 }
 
+/** ISO timestamp/date → its `YYYY-MM-DD` day, or null when absent. */
+function isoDay(value: string | null): string | null {
+  return value ? value.slice(0, 10) : null;
+}
+
+/** Price → "$1,250,000", or null when absent. */
+function money(value: number | null): string | null {
+  return value == null ? null : `$${value.toLocaleString()}`;
+}
+
 function addRow(grid: HTMLElement, label: string, value: string): void {
   grid.append(el("dt", undefined, label), el("dd", undefined, value));
 }
@@ -91,6 +101,30 @@ export function buildPopupContent(props: ParcelProperties): HTMLElement {
   // State-bill pathway — mutually exclusive; omitted when neither applies.
   const stateBill = props.adds_sb9 ? "SB 9" : props.adds_sb1123 ? "SB 1123" : null;
   if (stateBill) addRow(grid, "State bill", stateBill);
+
+  // Post-fire real-estate activity (RentCast) — each row omitted when absent.
+  if (props.sold_post_fire && props.last_sale_date) {
+    const price = money(props.last_sale_price);
+    const soldDay = props.last_sale_date.slice(0, 10);
+    addRow(grid, "Sold", price ? `${soldDay} · ${price}` : soldDay);
+    if (props.owner_name) {
+      const occ =
+        props.owner_occupied === true
+          ? "owner-occupied"
+          : props.owner_occupied === false
+            ? "absentee"
+            : null;
+      const detail = [props.owner_type, occ].filter(Boolean).join(", ");
+      // User-facing label stays "Buyer" (the post-fire owner of record).
+      addRow(grid, "Buyer", detail ? `${props.owner_name} (${detail})` : props.owner_name);
+    }
+  }
+  if (props.active_listing) {
+    const listedDay = isoDay(props.listing_date);
+    const status = props.listing_status ? `(${props.listing_status})` : null;
+    const listedText = [listedDay ? `listed ${listedDay}` : null, status].filter(Boolean).join(" ");
+    addRow(grid, "For sale", listedText || "Active");
+  }
 
   root.append(grid);
 

@@ -9,9 +9,23 @@ const props = withDefaults(
     selectedBuckets?: string[];
     // Tint for the value, matching this bucket's map-dot color. Defaults to poppy.
     color?: string;
+    // When set (>0), render the value as a percentage of this denominator below
+    // the count — e.g. "12.3% of damaged/destroyed homes".
+    denominator?: number;
   }>(),
-  { label: undefined, bucketKey: undefined, selectedBuckets: () => [], color: undefined },
+  {
+    label: undefined,
+    bucketKey: undefined,
+    selectedBuckets: () => [],
+    color: undefined,
+    denominator: undefined,
+  },
 );
+
+const pctLabel = (): string | null => {
+  if (!props.denominator || props.denominator <= 0) return null;
+  return `${((props.value / props.denominator) * 100).toFixed(1)}%`;
+};
 
 // `additive` carries the Shift modifier so the parent can build a filter set.
 const emit = defineEmits<{ select: [key: string, additive: boolean] }>();
@@ -42,6 +56,7 @@ function onSelect(event: MouseEvent): void {
     <span class="big-number__value" :style="color ? { color } : undefined">{{
       value.toLocaleString()
     }}</span>
+    <span v-if="pctLabel()" class="big-number__pct">{{ pctLabel() }}</span>
     <span v-if="label" class="big-number__label">{{ label }}</span>
   </component>
 </template>
@@ -89,6 +104,12 @@ function onSelect(event: MouseEvent): void {
   font-family: var(--font-display);
   font-size: var(--fs-display);
   color: var(--color-poppy);
+  line-height: 1;
+}
+
+.big-number__pct {
+  font-size: var(--fs-sm);
+  color: var(--color-ink-muted);
   line-height: 1;
 }
 

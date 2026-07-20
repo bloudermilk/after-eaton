@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,7 +27,11 @@ from .processing.extraction_compare import (
     extraction_metrics,
     override_with_llm,
 )
-from .processing.geometry import bounding_envelope
+from .processing.geometry import (
+    bounding_envelope,
+    circle_from_bounds,
+    parcels_bounding_envelope,
+)
 from .processing.join import JoinedParcel, join_cases_to_parcels
 from .processing.llm_extraction import (
     ExtractionCache,
@@ -45,6 +50,19 @@ from .processing.parcel_analysis import (
     pre_fire_summary,
     select_qualifying_records,
 )
+from .processing.sales import (
+    INCREMENTAL_SALE_DAYS,
+    SalesCache,
+    apply_sales,
+    build_parcels_index,
+    full_backfill_days,
+    full_refresh_due,
+    load_sales_cache,
+    normalize_listings,
+    normalize_properties,
+    prune_sales_cache,
+    save_sales_cache,
+)
 from .processing.spatial_aggregate import aggregate_by_region
 from .qc.aggregate import QcFailedError, check_thresholds
 from .qc.per_record import RecordWarning, check_record, check_spatial_assignment
@@ -55,7 +73,12 @@ from .sources.dins import fetch_dins_parcels
 from .sources.epicla import fetch_epicla_cases
 from .sources.epicla_case_history import fetch_case_history_sb1123
 from .sources.fire_perimeter import fetch_fire_perimeter
-from .sources.schemas import EpicCase
+from .sources.rentcast import (
+    RentCastError,
+    fetch_rentcast_properties,
+    fetch_rentcast_sale_listings,
+)
+from .sources.schemas import DinsParcel, EpicCase
 
 logger = logging.getLogger("altadata")
 
@@ -92,12 +115,34 @@ logger = logging.getLogger("altadata")
     default=None,
     help="Path to llm-extraction-cache.json (default: <out-dir>/llm-extraction-cache.json).",  # noqa: E501
 )
+@click.option(
+    "--rentcast/--no-rentcast",
+    default=True,
+    show_default=True,
+    help="Enable RentCast sales/listings overlay (requires RENTCAST_API_KEY in env).",
+)
+@click.option(
+    "--rentcast-full-refresh",
+    is_flag=True,
+    default=False,
+    help="Force a full post-fire sales backfill instead of the cheap incremental "
+    "window (use for the periodic reconcile).",
+)
+@click.option(
+    "--rentcast-cache-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to rentcast-cache.json (default: <out-dir>/rentcast-cache.json).",
+)
 def run(
     out_dir: Path,
     log_level: str,
     llm_extraction: bool,
     llm_model: str,
     llm_cache_path: Path | None,
+    rentcast: bool,
+    rentcast_full_refresh: bool,
+    rentcast_cache_path: Path | None,
 ) -> None:
     """Fetch sources, join, analyze, QC, and write outputs."""
     logging.basicConfig(
@@ -232,6 +277,20 @@ def run(
             run_info.parcels_failed,
         )
 
+    # Overlay RentCast post-fire sales + active listings onto the results before
+    # any aggregation or output, so the "Property Sales" counts and the per-parcel
+    # popup fields flow through the same single-source-of-truth paths as every
+    # other metric. RentCast is supplementary: failures degrade to cached data.
+    sales_cache_path = rentcast_cache_path or (out_dir / "rentcast-cache.json")
+    sales_cache, sales_warnings = _collect_sales(
+        enabled=rentcast,
+        full_refresh=rentcast_full_refresh,
+        parcels=parcels,
+        cache_path=sales_cache_path,
+        generated_at=generated_at,
+    )
+    apply_sales(results, sales_cache)
+
     tract_aggregation = aggregate_by_region(
         pairs,
         cast(list[dict[str, Any]], tracts),
@@ -244,6 +303,7 @@ def run(
     )
 
     record_warnings: list[RecordWarning] = list(llm_warnings)
+    record_warnings.extend(sales_warnings)
     if not llm_extraction:
         record_warnings.append(
             RecordWarning(
@@ -309,6 +369,151 @@ def run(
     )
 
     logger.info("wrote outputs to %s", out_dir)
+
+
+def _collect_sales(
+    *,
+    enabled: bool,
+    full_refresh: bool,
+    parcels: list[DinsParcel],
+    cache_path: Path,
+    generated_at: str,
+) -> tuple[SalesCache, list[RecordWarning]]:
+    """Fetch RentCast sales/listings, upsert into the cache, and return it.
+
+    Never raises: RentCast is a *service*, not a published source (its raw
+    responses are not part of the data contract — see the module docstring in
+    ``processing.sales``). A missing key or fetch failure logs a warning and
+    falls back to the last-good cache (empty on a cold start), so the daily
+    release always publishes. The returned warnings surface in the QC report.
+    """
+    cache = load_sales_cache(cache_path)
+    warnings: list[RecordWarning] = []
+
+    if not enabled:
+        warnings.append(
+            RecordWarning(
+                ain="*",
+                code="rentcast_disabled",
+                detail="RentCast overlay disabled by --no-rentcast",
+                severity="info",
+            )
+        )
+    elif not os.environ.get("RENTCAST_API_KEY"):
+        warnings.append(
+            RecordWarning(
+                ain="*",
+                code="rentcast_disabled",
+                detail="RENTCAST_API_KEY not set; reusing cached sales data",
+                severity="info",
+            )
+        )
+    else:
+        try:
+            index = build_parcels_index(parcels)
+            # Scope the area query to the Altadena parcel population, not the fire
+            # perimeter (which reaches miles east into unpopulated foothills).
+            lat, lon, radius = circle_from_bounds(parcels_bounding_envelope(parcels))
+            # Full since-fire sweep on a cold cache, when forced, or when the
+            # periodic reconcile is due; otherwise the cheap rolling window.
+            do_full = (
+                full_refresh
+                or not cache.backfill_done
+                or full_refresh_due(cache, generated_at)
+            )
+            window = (
+                full_backfill_days(generated_at) if do_full else INCREMENTAL_SALE_DAYS
+            )
+            logger.info(
+                "fetching RentCast (%s; saleDateRange=%d days; "
+                "center=%.4f,%.4f r=%.2fmi)",
+                "full reconcile" if do_full else "incremental",
+                window,
+                lat,
+                lon,
+                radius,
+            )
+            props = list(
+                fetch_rentcast_properties(lat, lon, radius, sale_date_range=window)
+            )
+            listings = list(fetch_rentcast_sale_listings(lat, lon, radius))
+            logger.info(
+                "RentCast returned %d sold-property records, %d active listings",
+                len(props),
+                len(listings),
+            )
+
+            unmatched_sales: list[str] = []
+            unmatched_listings: list[str] = []
+            new_sold = normalize_properties(props, index, unmatched=unmatched_sales)
+            cache.sold.update(new_sold)
+            cache.listings = normalize_listings(
+                listings, index, unmatched=unmatched_listings
+            )
+            cache.backfill_done = True
+            cache.generated_at = generated_at
+            if do_full:
+                cache.last_full_refresh = generated_at
+            prune_sales_cache(cache, {p["AIN_1"] for p in parcels})
+            save_sales_cache(cache_path, cache)
+            logger.info(
+                "RentCast cache saved to %s (%d post-fire sales, %d active listings)",
+                cache_path,
+                len(cache.sold),
+                len(cache.listings),
+            )
+
+            # Surface likely join drift: records came back but none matched a
+            # parcel (e.g. RentCast changed its assessorID/address format).
+            if (props or listings) and not new_sold and not cache.listings:
+                warnings.append(
+                    RecordWarning(
+                        ain="*",
+                        code="rentcast_no_matches",
+                        detail=(
+                            f"RentCast returned {len(props)} properties + "
+                            f"{len(listings)} listings but none joined to a parcel"
+                        ),
+                        severity="data",
+                    )
+                )
+
+            # Info-level audit of the individual records that didn't join to a
+            # parcel. Address→AIN matching is exact-after-normalization (no USPS
+            # canonicalization), and listings carry no assessorID, so some
+            # non-matches are expected (out-of-set homes, unit-designator
+            # differences). `ain="*"` because a non-match has no AIN by
+            # definition; these are info-severity so they never gate the run.
+            for label in unmatched_sales:
+                warnings.append(
+                    RecordWarning(
+                        ain="*",
+                        code="rentcast_unmatched_sale",
+                        detail=f"post-fire sale did not join to a parcel: {label}",
+                        severity="info",
+                    )
+                )
+            for label in unmatched_listings:
+                warnings.append(
+                    RecordWarning(
+                        ain="*",
+                        code="rentcast_unmatched_listing",
+                        detail=f"active listing did not join to a parcel: {label}",
+                        severity="info",
+                    )
+                )
+        except RentCastError as exc:
+            logger.warning("RentCast fetch failed (%s); reusing cached sales", exc)
+            warnings.append(
+                RecordWarning(
+                    ain="*",
+                    code="rentcast_fetch_failed",
+                    detail=str(exc),
+                    severity="data",
+                )
+            )
+
+    return cache, warnings
 
 
 def _maybe_build_provider(

@@ -38,10 +38,21 @@ jobs:
             --dir data \
             --clobber || echo "no existing cache asset; pipeline will start with an empty cache"
 
+      - name: Restore RentCast cache from rentcast-cache-latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p data
+          gh release download rentcast-cache-latest \
+            --pattern rentcast-cache.json \
+            --dir data \
+            --clobber || echo "no existing rentcast cache; will backfill post-fire sales this run"
+
       - name: Run pipeline
         working-directory: pipeline
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          RENTCAST_API_KEY: ${{ secrets.RENTCAST_API_KEY }}
         run: altadata --out-dir ../data --log-level INFO
 
       - name: Persist LLM cache (always, even on pipeline failure)
@@ -55,6 +66,18 @@ jobs:
                 --title "llm-cache-latest" \
                 --notes "Internal pipeline build cache. Not part of the published data contract; do not consume from frontends."
           gh release upload llm-cache-latest data/llm-extraction-cache.json --clobber
+
+      - name: Persist RentCast cache (always, even on pipeline failure)
+        if: always() && hashFiles('data/rentcast-cache.json') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release view rentcast-cache-latest >/dev/null 2>&1 \
+            || gh release create rentcast-cache-latest \
+                --title "rentcast-cache-latest" \
+                --notes "Internal RentCast sales/listings accumulator cache. Not part of the published data contract; do not consume from frontends."
+          gh release upload rentcast-cache-latest data/rentcast-cache.json --clobber
 
       - name: Publish releases
         env:

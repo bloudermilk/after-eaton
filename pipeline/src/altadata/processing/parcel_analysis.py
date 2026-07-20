@@ -122,6 +122,22 @@ class ParcelResult:
     # permits never carry the application/zoning milestones, so this is 0 or 3-7.
     # Drives the "New construction milestones" funnel and its map stage ramp.
     rebuild_new_stage: int = 0
+    # Real-estate sales activity from RentCast (see processing/sales.py). These
+    # are overlaid AFTER analyze_parcel by `apply_sales`, so they default to
+    # "no activity" and analyze_parcel never sets them. `sold_post_fire` means a
+    # sale recorded strictly after the fire (FIRE_CUTOFF); `owner_*` is the
+    # post-fire owner of record (the buyer). `active_listing` means an active
+    # RentCast sale listing matched.
+    sold_post_fire: bool = False
+    last_sale_date: str | None = None
+    last_sale_price: int | None = None
+    owner_name: str | None = None
+    owner_type: str | None = None
+    owner_occupied: bool | None = None
+    active_listing: bool = False
+    listing_date: str | None = None
+    listing_status: str | None = None
+    listing_price: int | None = None
 
 
 def analyze_parcel(joined: JoinedParcel) -> ParcelResult:

@@ -129,6 +129,52 @@ class EpicCase(TypedDict, total=False):
     _geometry: NotRequired[dict[str, Any] | None]
 
 
+class RentCastOwner(TypedDict, total=False):
+    """Current-owner sub-object on a RentCast property record."""
+
+    names: NotRequired[list[str] | None]
+    type: NotRequired[str | None]
+
+
+class RentCastProperty(TypedDict, total=False):
+    """A RentCast property record (GET /properties).
+
+    Only the fields the sales feature reads are typed; RentCast returns many
+    more. `assessorID` is LA County's APN (primary join back to DINS by AIN);
+    `latitude`/`longitude` (WGS84) are the point-in-polygon fallback join;
+    `owner`/`lastSaleDate` supply the post-fire owner of record (the buyer) +
+    sale date.
+    """
+
+    id: NotRequired[str | None]
+    formattedAddress: NotRequired[str | None]
+    assessorID: NotRequired[str | None]
+    latitude: NotRequired[float | None]
+    longitude: NotRequired[float | None]
+    lastSaleDate: NotRequired[str | None]
+    lastSalePrice: NotRequired[float | int | None]
+    ownerOccupied: NotRequired[bool | None]
+    owner: NotRequired[RentCastOwner | None]
+
+
+class RentCastListing(TypedDict, total=False):
+    """A RentCast sale listing (GET /listings/sale).
+
+    `listedDate` + `status` answer "actively listed, and since when". Listings
+    carry no `assessorID`, so `latitude`/`longitude` (WGS84) are the join key —
+    point-in-polygon against DINS parcels, gated on the street number.
+    """
+
+    id: NotRequired[str | None]
+    formattedAddress: NotRequired[str | None]
+    assessorID: NotRequired[str | None]
+    latitude: NotRequired[float | None]
+    longitude: NotRequired[float | None]
+    listedDate: NotRequired[str | None]
+    status: NotRequired[str | None]
+    price: NotRequired[float | int | None]
+
+
 class SchemaError(ValueError):
     """Raised when a fetched record does not match the expected schema."""
 
@@ -250,3 +296,22 @@ def validate_census_block_groups(
             )
         out.append(raw)  # type: ignore[arg-type]
     return out
+
+
+def validate_rentcast_properties(
+    records: list[dict[str, Any]],
+) -> list[RentCastProperty]:
+    """Narrow raw RentCast property records, dropping any non-dict entries.
+
+    RentCast is a *supplementary* source (see cli.run), so this is lenient by
+    design: malformed individual records are skipped rather than aborting the
+    release. Field-level robustness lives in ``processing.sales`` normalization.
+    """
+    return [raw for raw in records if isinstance(raw, dict)]  # type: ignore[misc]
+
+
+def validate_rentcast_listings(
+    records: list[dict[str, Any]],
+) -> list[RentCastListing]:
+    """Narrow raw RentCast sale-listing records, dropping non-dict entries."""
+    return [raw for raw in records if isinstance(raw, dict)]  # type: ignore[misc]
