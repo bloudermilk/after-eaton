@@ -87,6 +87,14 @@ def _zero_counts(total: int = 0) -> RegionCounts:
         rebuild_progress_rebuilding_count=0,
         property_sold_post_fire_count=0,
         property_active_listing_count=0,
+        property_sold_to_individual_count=0,
+        property_sold_to_trust_count=0,
+        property_sold_to_company_count=0,
+        property_sold_owner_unknown_count=0,
+        listing_age_under_30_count=0,
+        listing_age_30_to_60_count=0,
+        listing_age_60_to_90_count=0,
+        listing_age_90_plus_count=0,
     )
 
 

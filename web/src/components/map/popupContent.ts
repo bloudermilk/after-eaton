@@ -50,6 +50,11 @@ function money(value: number | null): string | null {
   return value == null ? null : `$${value.toLocaleString()}`;
 }
 
+/** "company" → "Company". Owner-class keys are single lowercase words. */
+function titleCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 function addRow(grid: HTMLElement, label: string, value: string): void {
   grid.append(el("dt", undefined, label), el("dd", undefined, value));
 }
@@ -114,7 +119,10 @@ export function buildPopupContent(props: ParcelProperties): HTMLElement {
           : props.owner_occupied === false
             ? "absentee"
             : null;
-      const detail = [props.owner_type, occ].filter(Boolean).join(", ");
+      // Derived buyer class (individual/trust/company), not RentCast's owner_type
+      // — which files personal trusts under "Organization".
+      const classLabel = props.owner_class ? titleCase(props.owner_class) : null;
+      const detail = [classLabel, occ].filter(Boolean).join(", ");
       // User-facing label stays "Buyer" (the post-fire owner of record).
       addRow(grid, "Buyer", detail ? `${props.owner_name} (${detail})` : props.owner_name);
     }
@@ -122,7 +130,17 @@ export function buildPopupContent(props: ParcelProperties): HTMLElement {
   if (props.active_listing) {
     const listedDay = isoDay(props.listing_date);
     const status = props.listing_status ? `(${props.listing_status})` : null;
-    const listedText = [listedDay ? `listed ${listedDay}` : null, status].filter(Boolean).join(" ");
+    // Time-on-market band as of the last refresh, from the shared Listings metric.
+    const ageLabel = getMetric("listings")?.buckets.find(
+      (b) => b.key === props.listing_age_bucket,
+    )?.label;
+    const listedText = [
+      listedDay ? `listed ${listedDay}` : null,
+      ageLabel ? `${ageLabel} on market` : null,
+      status,
+    ]
+      .filter(Boolean)
+      .join(" · ");
     addRow(grid, "For sale", listedText || "Active");
   }
 

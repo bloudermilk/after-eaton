@@ -47,11 +47,13 @@ def aggregate_by_region(
     regions: list[dict[str, Any]],
     *,
     id_fields: list[str],
+    as_of: str,
 ) -> SpatialAggregation:
     """Assign each parcel to a region and emit one `RegionFeature` per region.
 
     `parcels` is a list of `(result, dins)` pairs — `dins` carries the
-    parcel polygon used to compute its centroid.
+    parcel polygon used to compute its centroid. `as_of` is the run date (ISO),
+    passed through to `count_parcels` for the listing-age breakdown.
 
     `regions` is a list of raw ArcGIS records (each carrying `_geometry`
     plus the id fields named in `id_fields`). The first id in `id_fields`
@@ -103,7 +105,7 @@ def aggregate_by_region(
             RegionFeature(
                 identifiers=identifiers,
                 geometry=esri_to_geojson(region.get("_geometry")),
-                counts=count_parcels(by_region[key]),
+                counts=count_parcels(by_region[key], as_of=as_of),
             )
         )
     return SpatialAggregation(features=features, unassigned_ains=unassigned)

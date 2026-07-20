@@ -10,9 +10,10 @@ from typing import Any
 from ..processing.aggregate import (
     adu_bucket,
     lfl_bucket,
-    property_sales_bucket,
+    listing_age_bucket,
     rebuild_progress_bucket,
     sfr_size_bucket,
+    sold_owner_bucket,
 )
 from ..processing.geometry import representative_point
 from ..processing.join import JoinedParcel
@@ -60,7 +61,7 @@ def write_parcels_compact_geojson(
         point = representative_point(joined)
         if point is None:
             continue
-        features.append(_to_compact_feature(result, point))
+        features.append(_to_compact_feature(result, point, generated_at))
     payload = {
         "type": "FeatureCollection",
         "metadata": {"generated_at": generated_at},
@@ -70,7 +71,7 @@ def write_parcels_compact_geojson(
 
 
 def _to_compact_feature(
-    result: ParcelResult, point: tuple[float, float]
+    result: ParcelResult, point: tuple[float, float], generated_at: str
 ) -> dict[str, Any]:
     properties: dict[str, Any] = {
         "ain": result.ain,
@@ -116,15 +117,21 @@ def _to_compact_feature(
         # safety tag, for context in the popup.
         "damage": result.damage.value,
         "bsd_status": result.bsd_status.value,
-        # Post-fire real-estate activity (RentCast). The bucket ("sold" | "listed"
-        # | "none", scoped to the Destroyed/Damaged population) drives the
-        # "Property Sales" card + map filter; the raw fields feed the popup.
-        "property_sales_bucket": property_sales_bucket(result),
+        # Post-fire real-estate activity (RentCast), scoped to the Destroyed/
+        # Damaged population. `sold_owner_bucket` (individual/trust/company/
+        # unknown/none) drives the "Property sales" card + map filter;
+        # `listing_age_bucket` (under_30/30_to_60/60_to_90/90_plus/none, as of the
+        # run date) drives the "Listings" card. The raw fields feed the popup.
+        "sold_owner_bucket": sold_owner_bucket(result),
+        "listing_age_bucket": listing_age_bucket(result, generated_at),
         "sold_post_fire": result.sold_post_fire,
         "last_sale_date": result.last_sale_date,
         "last_sale_price": result.last_sale_price,
         "owner_name": result.owner_name,
         "owner_type": result.owner_type,
+        # Derived buyer class (see owner_classifier); the popup shows this, not
+        # RentCast's owner_type which mislabels trusts as "Organization".
+        "owner_class": result.owner_class,
         "owner_occupied": result.owner_occupied,
         "active_listing": result.active_listing,
         "listing_date": result.listing_date,

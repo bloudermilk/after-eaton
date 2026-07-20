@@ -57,13 +57,14 @@ const densityBuckets = getMetric("density")?.buckets ?? [];
 const sb9Color = densityBuckets.find((b) => b.key === "sb9")?.color;
 const sb1123Color = densityBuckets.find((b) => b.key === "sb1123")?.color;
 
-// Property-sales colors, same pattern. Both counts are shares of the County's
-// Destroyed/Damaged population (== bsd_red_or_yellow_count), matching the
-// pipeline's property_*_count denominator and the Rebuild progress universe.
-const propertyBuckets = getMetric("property_sales")?.buckets ?? [];
-const soldColor = propertyBuckets.find((b) => b.key === "sold")?.color;
-const listedColor = propertyBuckets.find((b) => b.key === "listed")?.color;
-const damagedDestroyedDenominator = computed(() => summary.value?.bsd_red_or_yellow_count ?? 0);
+// Property sales — post-fire buyers split by class. The denominator is all
+// post-fire sales on destroyed/damaged parcels, so each class reads as its share
+// of who bought. Listings — active listings split by time on market, a share of
+// all active listings. Both from RentCast, scoped to the Destroyed/Damaged set.
+const propertySalesItems = computed(() => bucketsFor("property_sales"));
+const propertySoldDenominator = computed(() => summary.value?.property_sold_post_fire_count ?? 0);
+const listingItems = computed(() => bucketsFor("listings"));
+const listingDenominator = computed(() => summary.value?.property_active_listing_count ?? 0);
 
 // A card shows the accent border when it's the focused metric (its ramp colors
 // the map) or when it has any bucket in the filter set (a participating metric).
@@ -365,7 +366,7 @@ onBeforeUnmount(() => {
 
       <StatCard
         title="Property sales"
-        subtitle="Post-fire sales & active listings"
+        subtitle="Post-fire buyers"
         interactive
         :active="isCardActive('property_sales')"
         class="home__card"
@@ -376,39 +377,62 @@ onBeforeUnmount(() => {
         <template #info>
           <InfoButton title="Property sales">
             <p>
-              Real-estate activity on destroyed and damaged parcels since the fire, from
-              <strong>RentCast</strong>. <strong>Sold</strong> counts parcels that changed hands
-              after <strong>January 7, 2025</strong>; <strong>Listed</strong> counts parcels with an
-              active for-sale listing. Each percentage is a share of the County's Destroyed/Damaged
-              parcels (Red- or Yellow-tagged) — the same population as Rebuild progress.
+              Who is buying destroyed and damaged parcels since the fire, from
+              <strong>RentCast</strong>. Each parcel that changed hands after
+              <strong>January 7, 2025</strong> is grouped by its new owner of record — the buyer.
             </p>
             <p>
-              For sold parcels, the new owner of record is treated as the buyer. Tap a number to
-              highlight those parcels on the map; open a parcel to see its sale date, buyer, and
-              listing date.
+              <strong>Individuals</strong> and <strong>Trusts</strong> are people buying in their
+              own name or through a personal or family trust; <strong>Companies</strong> are LLCs,
+              corporations, and other business entities — the developers and flippers. We read the
+              class from the owner's name, not RentCast's owner type, which files personal trusts
+              under "Organization."
+            </p>
+            <p>
+              Percentages are each group's share of all post-fire sales on destroyed or damaged
+              parcels. Tap a group to highlight those parcels on the map; open a parcel to see its
+              sale date and buyer.
             </p>
           </InfoButton>
         </template>
-        <div class="paired-numbers">
-          <BigNumber
-            :value="summary.property_sold_post_fire_count"
-            label="Sold"
-            bucket-key="sold"
-            :color="soldColor"
-            :denominator="damagedDestroyedDenominator"
-            :selected-buckets="selectedBucketsFor('property_sales')"
-            @select="(key, additive) => selectBucket('property_sales', key, additive)"
-          />
-          <BigNumber
-            :value="summary.property_active_listing_count"
-            label="Listed"
-            bucket-key="listed"
-            :color="listedColor"
-            :denominator="damagedDestroyedDenominator"
-            :selected-buckets="selectedBucketsFor('property_sales')"
-            @select="(key, additive) => selectBucket('property_sales', key, additive)"
-          />
-        </div>
+        <MetricList
+          :items="propertySalesItems"
+          :denominator="propertySoldDenominator"
+          :selected-buckets="selectedBucketsFor('property_sales')"
+          @select="(key, additive) => selectBucket('property_sales', key, additive)"
+        />
+      </StatCard>
+
+      <StatCard
+        title="Listings"
+        subtitle="Active listings by time on market"
+        interactive
+        :active="isCardActive('listings')"
+        class="home__card"
+        data-metric-id="listings"
+        @click.capture="onCardTap('listings', $event)"
+        @toggle="(additive) => toggleMetric('listings', additive)"
+      >
+        <template #info>
+          <InfoButton title="Listings">
+            <p>
+              Destroyed and damaged parcels with an active for-sale listing, from
+              <strong>RentCast</strong>, grouped by how long they've been on the market as of the
+              latest data refresh.
+            </p>
+            <p>
+              Percentages are each band's share of all active listings on destroyed or damaged
+              parcels. A longer time on market can signal softer price or demand. Tap a band to
+              highlight those parcels on the map.
+            </p>
+          </InfoButton>
+        </template>
+        <MetricList
+          :items="listingItems"
+          :denominator="listingDenominator"
+          :selected-buckets="selectedBucketsFor('listings')"
+          @select="(key, additive) => selectBucket('listings', key, additive)"
+        />
       </StatCard>
     </div>
 

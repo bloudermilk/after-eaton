@@ -111,7 +111,9 @@ def test_centroid_assignment_emits_correct_per_region_counts() -> None:
         (_result("p4"), _dins("p4", _square(100.0, 100.0))),
     ]
 
-    result = aggregate_by_region(parcels, tracts, id_fields=["CT20", "LABEL"])
+    result = aggregate_by_region(
+        parcels, tracts, id_fields=["CT20", "LABEL"], as_of="2026-07-20"
+    )
 
     by_id = {f.identifiers["ct20"]: f for f in result.features}
     assert by_id["A"].counts.total_parcels == 2
@@ -145,7 +147,9 @@ def test_zero_parcel_region_still_emitted() -> None:
         (_result("p1"), _dins("p1", _square(5.0, 5.0))),
     ]
 
-    result = aggregate_by_region(parcels, tracts, id_fields=["CT20", "LABEL"])
+    result = aggregate_by_region(
+        parcels, tracts, id_fields=["CT20", "LABEL"], as_of="2026-07-20"
+    )
 
     by_id = {f.identifiers["ct20"]: f for f in result.features}
     assert by_id["A"].counts.total_parcels == 1
@@ -177,7 +181,9 @@ def test_per_region_total_sums_to_burn_area_total() -> None:
         (_result("p4"), _dins("p4", _square(15.0, 5.0))),
     ]
 
-    result = aggregate_by_region(parcels, tracts, id_fields=["CT20", "LABEL"])
+    result = aggregate_by_region(
+        parcels, tracts, id_fields=["CT20", "LABEL"], as_of="2026-07-20"
+    )
     summed = sum(f.counts.total_parcels for f in result.features)
     assert summed == len(parcels)
     assert result.unassigned_ains == []

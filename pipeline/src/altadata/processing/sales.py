@@ -37,6 +37,7 @@ from shapely.strtree import STRtree
 
 from ..outputs.geojson_writer import esri_to_geojson
 from ..sources.schemas import DinsParcel, RentCastListing, RentCastProperty
+from .owner_classifier import classify_owner
 from .parcel_analysis import ParcelResult
 
 logger = logging.getLogger(__name__)
@@ -279,6 +280,9 @@ def apply_sales(results: list[ParcelResult], cache: SalesCache) -> None:
             result.last_sale_price = sale.sale_price
             result.owner_name = sale.owner_name
             result.owner_type = sale.owner_type
+            # Reclassify from owner_name every run (not stored on the cache), so
+            # a rule change takes effect on the next run with no cache rebuild.
+            result.owner_class = classify_owner(sale.owner_name)
             result.owner_occupied = sale.owner_occupied
         listing = cache.listings.get(result.ain)
         if listing is not None:

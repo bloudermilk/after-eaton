@@ -94,6 +94,14 @@ The filter applies to **both** EPIC-LA sources — the Eaton-tagged view and the
 
 Each layer's identifier fields (`CT20`, `BG20`, `LABEL`) flow through to the per-feature `properties`.
 
+### RentCast — post-fire sales and listings
+
+- **Service:** [RentCast API](https://www.rentcast.io/api), authenticated with `RENTCAST_API_KEY`. **Supplementary** — unlike the sources above, a fetch failure degrades to the last-good cache and never aborts the run.
+- **Query + local join:** one area query per endpoint over a circle covering the DINS parcel bounding box (`/properties?saleDateRange=…` for recently-recorded sales; `/listings/sale?status=Active` for active listings), joined back to DINS parcels **locally** by AIN — matched from RentCast's `assessorID` (APN) first, then a street-number-gated point-in-polygon. RentCast is never queried per parcel.
+- **Window + cache:** each run pulls a rolling 120-day sale window (the county's `lastSaleDate` is a recording date that lags close by weeks) into a persistent accumulator cache (`rentcast-cache.json`), with an automatic monthly full since-fire reconcile. The cache accumulates every post-fire sale; active listings are a full snapshot replaced each run.
+- **Not a published source:** like the LLM provider, RentCast's raw responses are **never** written to a `source-*.json` release asset — only the derived per-parcel fields (`sold_post_fire`, `last_sale_date`, `last_sale_price`, `owner_name`, `owner_type`, `owner_class`, `owner_occupied`, `active_listing`, `listing_date`, `listing_status`, `listing_price`) enter the data contract.
+- **Population:** the derived counts are scoped to the County's Destroyed/Damaged (BSD Red/Yellow) parcels — the same population as [Rebuild progress](#rebuild-progress).
+
 ### What we explicitly do *not* use
 
 - **`STAT_CLASS` for SFR/ADU classification.** It is set by intake on a permit-type basis and routinely mislabels ADU and garage permits. We classify from `DESCRIPTION` text instead.
@@ -417,6 +425,16 @@ Both flags are parcel-level pathway flags, **not** structure types. Pathway-enti
 
 `max(0, post_adu_count − pre_adu_count)`. Positive only when the rebuild adds ADUs beyond what the parcel had pre-fire. If `post_adu_count` is unknown (no permit), returns `0` rather than null — so this field is a count of *confirmed* added ADUs, not an upper bound.
 
+### `owner_class`
+
+Classification of a post-fire sale's **buyer** (the current owner of record after the sale) into `individual`, `trust`, or `company` — `null` when the sale carried no owner name. Derived from `owner_name` by a name-token rule (`processing/owner_classifier.py`), checked in order:
+
+1. **`company`** — the name carries a legal suffix (`LLC`, `INC`, `LP`, `CORP`, `LTD`, …) or a business-activity keyword (`HOLDINGS`, `INVESTMENTS`, `DEVELOPMENT`, `PROPERTIES`, `CONSTRUCTION`, `HOMES`, `GROUP`, …). Checked **first**, so `IRON FAMILY INVESTMENTS LLC` is a company, not a trust.
+2. **`trust`** — otherwise, a trust/estate token (`TRUST`, `REVOCABLE`, `LIVING`, `FAMILY`, `SURVIVOR`, …), made truncation-tolerant because RentCast clips long names (e.g. `…FAMILY TRU`).
+3. **`individual`** — otherwise, a plain personal name.
+
+We use this **instead of RentCast's raw `owner_type`**, which labels personal and family trusts as `Organization` and so can't separate residents from developers. For the "who's buying" split, trusts group with individuals as "not a company." The rule reclassifies the entire sales cache every run, so tuning it never requires a cache rebuild.
+
 ### `lfl_conflict`
 
 See [Like-for-Like vs Custom](#like-for-like-vs-custom-lfl-claim).
@@ -532,6 +550,17 @@ GeoJSON `FeatureCollection`. One `Feature` per Altadena parcel.
 | `roe_status` | `string \| null` | DINS `ROE_Status`, pass-through. |
 | `debris_cleared` | `string \| null` | DINS `Debris_Cleared`, pass-through. |
 | `dins_count` | `int` | DINS `DINS_Count`: number of damaged structures the inspector tagged on the parcel. |
+| `sold_post_fire` | `bool` | `true` if RentCast recorded a sale strictly after the fire (2025-01-07). See [RentCast](#rentcast--post-fire-sales-and-listings). |
+| `last_sale_date` | `string \| null` | Recording date (`YYYY-MM-DD`) of the post-fire sale, or `null`. |
+| `last_sale_price` | `int \| null` | Recorded post-fire sale price, or `null`. |
+| `owner_name` | `string \| null` | Post-fire owner of record (the buyer); `&`-joined when multiple names. `null` when none. |
+| `owner_type` | `string \| null` | RentCast's raw owner type (`Individual`/`Organization`/…). Retained for reference; the app classifies with `owner_class` instead. |
+| `owner_class` | `string \| null` | Derived buyer class: `individual`/`trust`/`company`, or `null` when no owner name. See [`owner_class`](#owner_class). |
+| `owner_occupied` | `bool \| null` | RentCast `ownerOccupied`, or `null`. |
+| `active_listing` | `bool` | `true` if RentCast has an active for-sale listing matched to the parcel. |
+| `listing_date` | `string \| null` | Listing date (`YYYY-MM-DD`), or `null`. |
+| `listing_status` | `string \| null` | Listing status (typically `Active`). |
+| `listing_price` | `int \| null` | Listing price, or `null`. |
 
 ### `summary.json`
 
@@ -571,6 +600,10 @@ Burn-area-wide aggregate counts.
 | `sfr_smaller_count` | `int` | Parcels with `sfr_size_comparison = smaller`. |
 | `sb9_count` | `int` | Parcels with `adds_sb9 = true`. |
 | `added_adu_count` | `int` | Parcels with `added_adu_count > 0` (note: name reused, slightly misleading — this is a *count of parcels*, not an aggregate ADU count). |
+| `property_sold_post_fire_count` | `int` | Destroyed/Damaged (BSD Red/Yellow) parcels with a post-fire sale. See [RentCast](#rentcast--post-fire-sales-and-listings). |
+| `property_active_listing_count` | `int` | Destroyed/Damaged parcels with an active for-sale listing. |
+| `property_sold_to_individual_count` / `property_sold_to_trust_count` / `property_sold_to_company_count` / `property_sold_owner_unknown_count` | `int` | The post-fire sales split by buyer [`owner_class`](#owner_class) (`unknown` = sold but no owner name). The four partition `property_sold_post_fire_count`. |
+| `listing_age_under_30_count` / `listing_age_30_to_60_count` / `listing_age_60_to_90_count` / `listing_age_90_plus_count` | `int` | Active listings split by days on market as of `generated_at` (`<30` / `30–60` / `60–90` / `≥90`). Sum to the active listings carrying a listing date, so `≤ property_active_listing_count`. |
 
 ### `2020-census-tracts.geojson` / `2020-census-block-groups.geojson`
 

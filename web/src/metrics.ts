@@ -16,7 +16,8 @@ export type MetricId =
   | "lfl"
   | "adu"
   | "density"
-  | "property_sales";
+  | "property_sales"
+  | "listings";
 export type ChartKind = "vbars" | "donut" | "dist" | "bignumber" | "stagelist";
 
 /**
@@ -275,24 +276,72 @@ export const METRICS: MetricDef[] = [
   {
     id: "property_sales",
     title: "Property sales",
-    subtitle: "Post-fire sales & active listings",
-    chart: "bignumber",
-    // property_sales_bucket resolves each parcel to "sold" | "listed" | "none"
-    // (scoped to the Destroyed/Damaged population in the pipeline). The two
-    // counts are shares of bsd_red_or_yellow_count (the card's denominator).
-    valueExpr: get("property_sales_bucket"),
+    subtitle: "Post-fire buyers",
+    chart: "dist",
+    // sold_owner_bucket resolves each sold parcel to who bought it —
+    // "individual" | "trust" | "company" | "unknown" | "none" (scoped to the
+    // Destroyed/Damaged population in the pipeline). The card shows the three
+    // named classes as shares of property_sold_post_fire_count (the denominator).
+    // Derived from owner_class, NOT RentCast's owner_type, which mislabels
+    // personal/family trusts as "Organization". Trusts stand as their own bucket
+    // but read as "not a company" alongside individuals.
+    valueExpr: get("sold_owner_bucket"),
     buckets: [
       {
-        key: "sold",
-        label: "Sold",
+        key: "individual",
+        label: "Individuals",
         color: C.deodara,
-        summaryKey: "property_sold_post_fire_count",
+        summaryKey: "property_sold_to_individual_count",
       },
       {
-        key: "listed",
-        label: "Listed",
+        key: "trust",
+        label: "Trusts",
+        color: C.lupinSoft,
+        summaryKey: "property_sold_to_trust_count",
+      },
+      {
+        key: "company",
+        label: "Companies",
         color: C.poppy,
-        summaryKey: "property_active_listing_count",
+        summaryKey: "property_sold_to_company_count",
+      },
+    ],
+  },
+  {
+    id: "listings",
+    title: "Listings",
+    subtitle: "Active listings by time on market",
+    chart: "dist",
+    // listing_age_bucket resolves each active-listing parcel to its age band as
+    // of the run date — "under_30" | "30_to_60" | "60_to_90" | "90_plus" |
+    // "none" (scoped to the Destroyed/Damaged population). The four bands read as
+    // shares of property_active_listing_count (the denominator). The ramp runs
+    // fresh (green) → stale (poppy).
+    valueExpr: get("listing_age_bucket"),
+    buckets: [
+      {
+        key: "under_30",
+        label: "< 30 days",
+        color: C.deodara,
+        summaryKey: "listing_age_under_30_count",
+      },
+      {
+        key: "30_to_60",
+        label: "30–60 days",
+        color: C.lupinSoft,
+        summaryKey: "listing_age_30_to_60_count",
+      },
+      {
+        key: "60_to_90",
+        label: "60–90 days",
+        color: C.poppySoft,
+        summaryKey: "listing_age_60_to_90_count",
+      },
+      {
+        key: "90_plus",
+        label: "90+ days",
+        color: C.poppy,
+        summaryKey: "listing_age_90_plus_count",
       },
     ],
   },

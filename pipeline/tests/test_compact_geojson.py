@@ -194,12 +194,14 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         "damage",
         "bsd_status",
         # Post-fire real-estate activity (RentCast).
-        "property_sales_bucket",
+        "sold_owner_bucket",
+        "listing_age_bucket",
         "sold_post_fire",
         "last_sale_date",
         "last_sale_price",
         "owner_name",
         "owner_type",
+        "owner_class",
         "owner_occupied",
         "active_listing",
         "listing_date",
@@ -235,14 +237,16 @@ def test_compact_geojson_emits_points_and_minimal_props(tmp_path: Path) -> None:
         # _result fixes damage=DESTROYED and defaults bsd_status to RED.
         "damage": "destroyed",
         "bsd_status": "red",
-        # _result has no RentCast overlay → no sale/listing activity. RED + no
-        # activity ⇒ property_sales_bucket "none".
-        "property_sales_bucket": "none",
+        # _result has no RentCast overlay → no sale/listing activity. Not sold /
+        # not listed ⇒ both buckets resolve to "none"; owner_class stays null.
+        "sold_owner_bucket": "none",
+        "listing_age_bucket": "none",
         "sold_post_fire": False,
         "last_sale_date": None,
         "last_sale_price": None,
         "owner_name": None,
         "owner_type": None,
+        "owner_class": None,
         "owner_occupied": None,
         "active_listing": False,
         "listing_date": None,

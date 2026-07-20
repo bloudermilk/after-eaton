@@ -295,11 +295,13 @@ def run(
         pairs,
         cast(list[dict[str, Any]], tracts),
         id_fields=["CT20", "LABEL"],
+        as_of=generated_at,
     )
     block_group_aggregation = aggregate_by_region(
         pairs,
         cast(list[dict[str, Any]], block_groups),
         id_fields=["BG20", "CT20", "LABEL"],
+        as_of=generated_at,
     )
 
     record_warnings: list[RecordWarning] = list(llm_warnings)

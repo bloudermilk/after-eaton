@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
+from datetime import date
 
 from .normalize import REBUILD_STAGES, BsdStatus, DamageLevel
 from .parcel_analysis import ParcelResult
@@ -92,6 +93,23 @@ class RegionCounts:
     # single-bucket precedence).
     property_sold_post_fire_count: int
     property_active_listing_count: int
+    # Post-fire sales split by who bought (the "Property sales" card). Derived
+    # from each sold parcel's owner_class (individual/trust/company, or `unknown`
+    # when the sale had no owner name). The four partition
+    # property_sold_post_fire_count. Trusts are their own count but group with
+    # individuals as "not a company" in the frontend. See METHODOLOGY -> owner_class.
+    property_sold_to_individual_count: int
+    property_sold_to_trust_count: int
+    property_sold_to_company_count: int
+    property_sold_owner_unknown_count: int
+    # Active listings split by how long they've been on the market (the "Listings"
+    # card), in days as of the run date: <30 / 30–60 / 60–90 / ≥90. The four sum
+    # to the active listings carrying a parseable listing date, so their total is
+    # ≤ property_active_listing_count (RentCast listings virtually always dated).
+    listing_age_under_30_count: int
+    listing_age_30_to_60_count: int
+    listing_age_60_to_90_count: int
+    listing_age_90_plus_count: int
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -189,7 +207,62 @@ def property_sales_bucket(parcel: ParcelResult) -> str:
     return "none"
 
 
-def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
+def sold_owner_bucket(parcel: ParcelResult) -> str:
+    """Owner class of a post-fire sale within the Destroyed/Damaged population.
+
+    Scoped to BSD Red/Yellow parcels that sold post-fire (the same population as
+    the `property_sold_*_count` fields), resolving to the parcel's `owner_class`
+    — or `unknown` when the sale carried no owner name. `none` = outside the
+    population or no post-fire sale. The four in-population values
+    (individual/trust/company/unknown) partition `property_sold_post_fire_count`,
+    so the map filter lines up with the "Property sales" card counts.
+    """
+    if parcel.bsd_status not in (BsdStatus.RED, BsdStatus.YELLOW):
+        return "none"
+    if not parcel.sold_post_fire:
+        return "none"
+    return parcel.owner_class or "unknown"
+
+
+def listing_age_bucket(parcel: ParcelResult, as_of: str) -> str:
+    """Active-listing age split within the Destroyed/Damaged population.
+
+    Scoped to BSD Red/Yellow parcels with an active listing carrying a parseable
+    `listing_date`; `as_of` is the run date (ISO). Age in days buckets as
+    `under_30` / `30_to_60` / `60_to_90` / `90_plus` (lower bound inclusive).
+    `none` = outside the population, not listed, or no parseable listing date
+    (RentCast listings virtually always carry one). The four in-population values
+    sum to the active listings with a date (≤ `property_active_listing_count`).
+    """
+    if parcel.bsd_status not in (BsdStatus.RED, BsdStatus.YELLOW):
+        return "none"
+    if not parcel.active_listing:
+        return "none"
+    days = _listing_age_days(as_of, parcel.listing_date)
+    if days is None:
+        return "none"
+    if days < 30:
+        return "under_30"
+    if days < 60:
+        return "30_to_60"
+    if days < 90:
+        return "60_to_90"
+    return "90_plus"
+
+
+def _listing_age_days(as_of: str, listing_date: str | None) -> int | None:
+    """Whole days from `listing_date` to the run date; None if either won't parse."""
+    if not listing_date:
+        return None
+    try:
+        listed = date.fromisoformat(listing_date[:10])
+        run_day = date.fromisoformat(as_of[:10])
+    except ValueError:
+        return None
+    return (run_day - listed).days
+
+
+def count_parcels(parcels: Iterable[ParcelResult], *, as_of: str) -> RegionCounts:
     """Compute every published count field for a parcel set.
 
     Used both by `aggregate_burn_area` and by per-region (tract / block
@@ -261,12 +334,26 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
 
     # Property sales within the Destroyed/Damaged (BSD red/yellow) population.
     # Counted independently (not via property_sales_bucket, which is single-valued
-    # for the map) so the two card numbers match their own predicates exactly.
+    # for the map) so the two card totals match their own predicates exactly.
     damaged_pop = [
         p for p in parcels if p.bsd_status in (BsdStatus.RED, BsdStatus.YELLOW)
     ]
     property_sold = sum(1 for p in damaged_pop if p.sold_post_fire)
     property_listed = sum(1 for p in damaged_pop if p.active_listing)
+
+    # Sold-by-owner-class and listing-by-age breakdowns, computed via the shared
+    # bucket classifiers so the map dots line up with these card counts. The four
+    # sold-owner values partition property_sold_post_fire_count; the four
+    # listing-age values sum to the active listings carrying a parseable date.
+    sold_owner = {"individual": 0, "trust": 0, "company": 0, "unknown": 0}
+    listing_age = {"under_30": 0, "30_to_60": 0, "60_to_90": 0, "90_plus": 0}
+    for p in parcels:
+        owner_key = sold_owner_bucket(p)
+        if owner_key in sold_owner:
+            sold_owner[owner_key] += 1
+        age_key = listing_age_bucket(p, as_of)
+        if age_key in listing_age:
+            listing_age[age_key] += 1
 
     return RegionCounts(
         total_parcels=total,
@@ -309,6 +396,14 @@ def count_parcels(parcels: Iterable[ParcelResult]) -> RegionCounts:
         rebuild_progress_rebuilding_count=rebuild_progress_rebuilding,
         property_sold_post_fire_count=property_sold,
         property_active_listing_count=property_listed,
+        property_sold_to_individual_count=sold_owner["individual"],
+        property_sold_to_trust_count=sold_owner["trust"],
+        property_sold_to_company_count=sold_owner["company"],
+        property_sold_owner_unknown_count=sold_owner["unknown"],
+        listing_age_under_30_count=listing_age["under_30"],
+        listing_age_30_to_60_count=listing_age["30_to_60"],
+        listing_age_60_to_90_count=listing_age["60_to_90"],
+        listing_age_90_plus_count=listing_age["90_plus"],
     )
 
 
@@ -316,5 +411,5 @@ def aggregate_burn_area(
     parcels: list[ParcelResult],
     generated_at: str,
 ) -> SummaryResult:
-    counts = count_parcels(parcels)
+    counts = count_parcels(parcels, as_of=generated_at)
     return SummaryResult(generated_at=generated_at, **asdict(counts))

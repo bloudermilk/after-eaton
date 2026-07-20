@@ -10,7 +10,12 @@ from typing import Any
 import pytest
 from pytest_httpx import HTTPXMock
 
-from altadata.processing.aggregate import count_parcels, property_sales_bucket
+from altadata.processing.aggregate import (
+    count_parcels,
+    listing_age_bucket,
+    property_sales_bucket,
+    sold_owner_bucket,
+)
 from altadata.processing.geometry import circle_from_bounds, parcels_bounding_envelope
 from altadata.processing.normalize import BsdStatus, DamageLevel
 from altadata.processing.parcel_analysis import ParcelResult
@@ -402,6 +407,8 @@ def test_apply_sales_overlays_fields() -> None:
     assert result.sold_post_fire is True
     assert result.last_sale_date == "2025-03-14"
     assert result.owner_name == "JANE DOE"
+    # owner_class is derived from owner_name (not RentCast's owner_type).
+    assert result.owner_class == "individual"
     assert result.owner_occupied is True
     assert result.active_listing is True
     assert result.listing_date == "2026-05-01"
@@ -479,9 +486,75 @@ def test_property_counts_scoped_to_damaged_population() -> None:
             "p4", bsd_status=BsdStatus.RED, sold_post_fire=True, active_listing=True
         ),
     ]
-    counts = count_parcels(parcels)
+    counts = count_parcels(parcels, as_of="2026-07-20")
     assert counts.property_sold_post_fire_count == 2  # p1, p4
     assert counts.property_active_listing_count == 2  # p2, p4
+
+
+def test_sold_owner_and_listing_age_buckets_scoped_and_bucketed() -> None:
+    as_of = "2026-07-20"
+    parcels = [
+        # Sold to each buyer class within the population.
+        _result("ind", sold_post_fire=True, owner_class="individual"),
+        _result("tru", sold_post_fire=True, owner_class="trust"),
+        _result("co", sold_post_fire=True, owner_class="company"),
+        # Sold but no owner name → unknown; still in the population.
+        _result("unk", sold_post_fire=True, owner_class=None),
+        # GREEN sale is outside the population → resolves to "none", uncounted.
+        _result(
+            "green",
+            bsd_status=BsdStatus.GREEN,
+            sold_post_fire=True,
+            owner_class="company",
+        ),
+        # Active listings at varied ages as of 2026-07-20.
+        _result("l0", active_listing=True, listing_date="2026-07-10"),  # 10d
+        _result("l1", active_listing=True, listing_date="2026-06-25"),  # 25d
+        _result("l2", active_listing=True, listing_date="2026-06-01"),  # 49d
+        _result("l3", active_listing=True, listing_date="2026-05-15"),  # 66d
+        _result("l4", active_listing=True, listing_date="2026-01-01"),  # 200d
+        # Listing with no date → "none", not counted in any age band.
+        _result("lnd", active_listing=True, listing_date=None),
+    ]
+
+    # Per-parcel buckets resolve as expected (drives the map coloring/filter).
+    assert sold_owner_bucket(parcels[0]) == "individual"
+    assert sold_owner_bucket(parcels[3]) == "unknown"
+    assert sold_owner_bucket(parcels[4]) == "none"  # GREEN, out of population
+    assert listing_age_bucket(parcels[5], as_of) == "under_30"
+    assert listing_age_bucket(parcels[7], as_of) == "30_to_60"
+    assert listing_age_bucket(parcels[8], as_of) == "60_to_90"
+    assert listing_age_bucket(parcels[9], as_of) == "90_plus"
+    assert listing_age_bucket(parcels[10], as_of) == "none"  # undated
+
+    counts = count_parcels(parcels, as_of=as_of)
+    # The four owner-class counts partition property_sold_post_fire_count.
+    assert counts.property_sold_to_individual_count == 1
+    assert counts.property_sold_to_trust_count == 1
+    assert counts.property_sold_to_company_count == 1
+    assert counts.property_sold_owner_unknown_count == 1
+    assert counts.property_sold_post_fire_count == 4  # GREEN sale excluded
+    assert (
+        counts.property_sold_to_individual_count
+        + counts.property_sold_to_trust_count
+        + counts.property_sold_to_company_count
+        + counts.property_sold_owner_unknown_count
+        == counts.property_sold_post_fire_count
+    )
+    # Listing-age bands; the dated ones sum to property_active_listing_count minus
+    # the single undated listing.
+    assert counts.listing_age_under_30_count == 2  # l0, l1
+    assert counts.listing_age_30_to_60_count == 1  # l2
+    assert counts.listing_age_60_to_90_count == 1  # l3
+    assert counts.listing_age_90_plus_count == 1  # l4
+    assert counts.property_active_listing_count == 6  # includes the undated one
+    assert (
+        counts.listing_age_under_30_count
+        + counts.listing_age_30_to_60_count
+        + counts.listing_age_60_to_90_count
+        + counts.listing_age_90_plus_count
+        == counts.property_active_listing_count - 1
+    )
 
 
 # --- helpers ---------------------------------------------------------------
@@ -493,6 +566,8 @@ def _result(
     bsd_status: BsdStatus = BsdStatus.RED,
     sold_post_fire: bool = False,
     active_listing: bool = False,
+    owner_class: str | None = None,
+    listing_date: str | None = None,
 ) -> ParcelResult:
     return ParcelResult(
         ain=ain,
@@ -526,5 +601,7 @@ def _result(
         debris_cleared=None,
         dins_count=1,
         sold_post_fire=sold_post_fire,
+        owner_class=owner_class,
         active_listing=active_listing,
+        listing_date=listing_date,
     )
