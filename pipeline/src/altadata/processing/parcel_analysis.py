@@ -137,7 +137,6 @@ class ParcelResult:
     # owner_name by owner_classifier in apply_sales — NOT RentCast's owner_type,
     # which labels personal/family trusts as "Organization". See METHODOLOGY.
     owner_class: str | None = None
-    owner_occupied: bool | None = None
     active_listing: bool = False
     listing_date: str | None = None
     listing_status: str | None = None

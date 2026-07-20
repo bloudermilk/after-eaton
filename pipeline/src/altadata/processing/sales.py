@@ -74,7 +74,6 @@ class SaleInfo:
     sale_price: int | None
     owner_name: str | None
     owner_type: str | None
-    owner_occupied: bool | None
 
 
 @dataclass
@@ -229,7 +228,6 @@ def normalize_properties(
             sale_price=_int_or_none(raw.get("lastSalePrice")),
             owner_name=owner_name,
             owner_type=(owner.get("type") if isinstance(owner, dict) else None),
-            owner_occupied=_bool_or_none(raw.get("ownerOccupied")),
         )
         existing = out.get(ain)
         if existing is None or info.sale_date > existing.sale_date:
@@ -283,7 +281,6 @@ def apply_sales(results: list[ParcelResult], cache: SalesCache) -> None:
             # Reclassify from owner_name every run (not stored on the cache), so
             # a rule change takes effect on the next run with no cache rebuild.
             result.owner_class = classify_owner(sale.owner_name)
-            result.owner_occupied = sale.owner_occupied
         listing = cache.listings.get(result.ain)
         if listing is not None:
             result.active_listing = True
@@ -350,7 +347,6 @@ def load_sales_cache(path: Path | str) -> SalesCache:
             sale_price=_int_or_none(s.get("sale_price")),
             owner_name=_str_or_none(s.get("owner_name")),
             owner_type=_str_or_none(s.get("owner_type")),
-            owner_occupied=_bool_or_none(s.get("owner_occupied")),
         )
         for s in payload.get("sold") or []
         if isinstance(s, dict) and s.get("ain") and s.get("sale_date")
@@ -504,10 +500,6 @@ def _float_or_none(value: Any) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     return None
-
-
-def _bool_or_none(value: Any) -> bool | None:
-    return value if isinstance(value, bool) else None
 
 
 def _str_or_none(value: Any) -> str | None:

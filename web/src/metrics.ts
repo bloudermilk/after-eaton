@@ -278,13 +278,12 @@ export const METRICS: MetricDef[] = [
     title: "Property sales",
     subtitle: "Post-fire buyers",
     chart: "dist",
-    // sold_owner_bucket resolves each sold parcel to who bought it —
+    // sold_owner_bucket resolves each sold parcel to its buyer class —
     // "individual" | "trust" | "company" | "unknown" | "none" (scoped to the
-    // Destroyed/Damaged population in the pipeline). The card shows the three
-    // named classes as shares of property_sold_post_fire_count (the denominator).
-    // Derived from owner_class, NOT RentCast's owner_type, which mislabels
-    // personal/family trusts as "Organization". Trusts stand as their own bucket
-    // but read as "not a company" alongside individuals.
+    // Destroyed/Damaged population in the pipeline). The three named classes read
+    // as shares of property_sold_post_fire_count (the denominator). Derived from
+    // owner_class, NOT RentCast's owner_type, which mislabels personal/family
+    // trusts as "Organization".
     valueExpr: get("sold_owner_bucket"),
     buckets: [
       {
@@ -301,7 +300,7 @@ export const METRICS: MetricDef[] = [
       },
       {
         key: "company",
-        label: "Companies",
+        label: "Corporations",
         color: C.poppy,
         summaryKey: "property_sold_to_company_count",
       },
@@ -313,10 +312,10 @@ export const METRICS: MetricDef[] = [
     subtitle: "Active listings by time on market",
     chart: "dist",
     // listing_age_bucket resolves each active-listing parcel to its age band as
-    // of the run date — "under_30" | "30_to_60" | "60_to_90" | "90_plus" |
-    // "none" (scoped to the Destroyed/Damaged population). The four bands read as
-    // shares of property_active_listing_count (the denominator). The ramp runs
-    // fresh (green) → stale (poppy).
+    // of the run date — "under_30" | "30_to_60" | "60_plus" | "none" (scoped to
+    // the Destroyed/Damaged population). The three bands read as shares of
+    // property_active_listing_count (the denominator). The ramp runs fresh
+    // (green) → stale (poppy).
     valueExpr: get("listing_age_bucket"),
     buckets: [
       {
@@ -332,16 +331,10 @@ export const METRICS: MetricDef[] = [
         summaryKey: "listing_age_30_to_60_count",
       },
       {
-        key: "60_to_90",
-        label: "60–90 days",
-        color: C.poppySoft,
-        summaryKey: "listing_age_60_to_90_count",
-      },
-      {
-        key: "90_plus",
-        label: "90+ days",
+        key: "60_plus",
+        label: "60+ days",
         color: C.poppy,
-        summaryKey: "listing_age_90_plus_count",
+        summaryKey: "listing_age_60_plus_count",
       },
     ],
   },

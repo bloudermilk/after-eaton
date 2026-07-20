@@ -96,20 +96,18 @@ class RegionCounts:
     # Post-fire sales split by who bought (the "Property sales" card). Derived
     # from each sold parcel's owner_class (individual/trust/company, or `unknown`
     # when the sale had no owner name). The four partition
-    # property_sold_post_fire_count. Trusts are their own count but group with
-    # individuals as "not a company" in the frontend. See METHODOLOGY -> owner_class.
+    # property_sold_post_fire_count. See METHODOLOGY -> owner_class.
     property_sold_to_individual_count: int
     property_sold_to_trust_count: int
     property_sold_to_company_count: int
     property_sold_owner_unknown_count: int
     # Active listings split by how long they've been on the market (the "Listings"
-    # card), in days as of the run date: <30 / 30–60 / 60–90 / ≥90. The four sum
-    # to the active listings carrying a parseable listing date, so their total is
-    # ≤ property_active_listing_count (RentCast listings virtually always dated).
+    # card), in days as of the run date: <30 / 30–60 / ≥60. The three sum to the
+    # active listings carrying a parseable listing date, so their total is ≤
+    # property_active_listing_count (RentCast listings virtually always dated).
     listing_age_under_30_count: int
     listing_age_30_to_60_count: int
-    listing_age_60_to_90_count: int
-    listing_age_90_plus_count: int
+    listing_age_60_plus_count: int
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -229,10 +227,10 @@ def listing_age_bucket(parcel: ParcelResult, as_of: str) -> str:
 
     Scoped to BSD Red/Yellow parcels with an active listing carrying a parseable
     `listing_date`; `as_of` is the run date (ISO). Age in days buckets as
-    `under_30` / `30_to_60` / `60_to_90` / `90_plus` (lower bound inclusive).
-    `none` = outside the population, not listed, or no parseable listing date
-    (RentCast listings virtually always carry one). The four in-population values
-    sum to the active listings with a date (≤ `property_active_listing_count`).
+    `under_30` / `30_to_60` / `60_plus` (lower bound inclusive). `none` = outside
+    the population, not listed, or no parseable listing date (RentCast listings
+    virtually always carry one). The three in-population values sum to the active
+    listings with a date (≤ `property_active_listing_count`).
     """
     if parcel.bsd_status not in (BsdStatus.RED, BsdStatus.YELLOW):
         return "none"
@@ -245,9 +243,7 @@ def listing_age_bucket(parcel: ParcelResult, as_of: str) -> str:
         return "under_30"
     if days < 60:
         return "30_to_60"
-    if days < 90:
-        return "60_to_90"
-    return "90_plus"
+    return "60_plus"
 
 
 def _listing_age_days(as_of: str, listing_date: str | None) -> int | None:
@@ -342,11 +338,11 @@ def count_parcels(parcels: Iterable[ParcelResult], *, as_of: str) -> RegionCount
     property_listed = sum(1 for p in damaged_pop if p.active_listing)
 
     # Sold-by-owner-class and listing-by-age breakdowns, computed via the shared
-    # bucket classifiers so the map dots line up with these card counts. The four
-    # sold-owner values partition property_sold_post_fire_count; the four
-    # listing-age values sum to the active listings carrying a parseable date.
+    # bucket classifiers so the map dots line up with these card counts. The
+    # sold-owner values partition property_sold_post_fire_count; the listing-age
+    # values sum to the active listings carrying a parseable date.
     sold_owner = {"individual": 0, "trust": 0, "company": 0, "unknown": 0}
-    listing_age = {"under_30": 0, "30_to_60": 0, "60_to_90": 0, "90_plus": 0}
+    listing_age = {"under_30": 0, "30_to_60": 0, "60_plus": 0}
     for p in parcels:
         owner_key = sold_owner_bucket(p)
         if owner_key in sold_owner:
@@ -402,8 +398,7 @@ def count_parcels(parcels: Iterable[ParcelResult], *, as_of: str) -> RegionCount
         property_sold_owner_unknown_count=sold_owner["unknown"],
         listing_age_under_30_count=listing_age["under_30"],
         listing_age_30_to_60_count=listing_age["30_to_60"],
-        listing_age_60_to_90_count=listing_age["60_to_90"],
-        listing_age_90_plus_count=listing_age["90_plus"],
+        listing_age_60_plus_count=listing_age["60_plus"],
     )
 
 

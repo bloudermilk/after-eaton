@@ -153,7 +153,6 @@ class RentCastProperty(TypedDict, total=False):
     longitude: NotRequired[float | None]
     lastSaleDate: NotRequired[str | None]
     lastSalePrice: NotRequired[float | int | None]
-    ownerOccupied: NotRequired[bool | None]
     owner: NotRequired[RentCastOwner | None]
 
 

@@ -113,18 +113,11 @@ export function buildPopupContent(props: ParcelProperties): HTMLElement {
     const soldDay = props.last_sale_date.slice(0, 10);
     addRow(grid, "Sold", price ? `${soldDay} · ${price}` : soldDay);
     if (props.owner_name) {
-      const occ =
-        props.owner_occupied === true
-          ? "owner-occupied"
-          : props.owner_occupied === false
-            ? "absentee"
-            : null;
       // Derived buyer class (individual/trust/company), not RentCast's owner_type
       // — which files personal trusts under "Organization".
       const classLabel = props.owner_class ? titleCase(props.owner_class) : null;
-      const detail = [classLabel, occ].filter(Boolean).join(", ");
       // User-facing label stays "Buyer" (the post-fire owner of record).
-      addRow(grid, "Buyer", detail ? `${props.owner_name} (${detail})` : props.owner_name);
+      addRow(grid, "Buyer", classLabel ? `${props.owner_name} (${classLabel})` : props.owner_name);
     }
   }
   if (props.active_listing) {

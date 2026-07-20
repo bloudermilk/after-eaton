@@ -383,10 +383,10 @@ onBeforeUnmount(() => {
             </p>
             <p>
               <strong>Individuals</strong> and <strong>Trusts</strong> are people buying in their
-              own name or through a personal or family trust; <strong>Companies</strong> are LLCs,
-              corporations, and other business entities — the developers and flippers. We read the
-              class from the owner's name, not RentCast's owner type, which files personal trusts
-              under "Organization."
+              own name or through a personal or family trust; <strong>Corporations</strong> are LLCs
+              and other business entities — the developers and flippers. We read the class from the
+              owner's name, not RentCast's owner type, which files personal trusts under
+              "Organization."
             </p>
             <p>
               Percentages are each group's share of all post-fire sales on destroyed or damaged

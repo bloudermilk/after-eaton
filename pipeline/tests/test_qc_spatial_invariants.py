@@ -93,8 +93,7 @@ def _zero_counts(total: int = 0) -> RegionCounts:
         property_sold_owner_unknown_count=0,
         listing_age_under_30_count=0,
         listing_age_30_to_60_count=0,
-        listing_age_60_to_90_count=0,
-        listing_age_90_plus_count=0,
+        listing_age_60_plus_count=0,
     )
 
 

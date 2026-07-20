@@ -132,7 +132,6 @@ def _to_compact_feature(
         # Derived buyer class (see owner_classifier); the popup shows this, not
         # RentCast's owner_type which mislabels trusts as "Organization".
         "owner_class": result.owner_class,
-        "owner_occupied": result.owner_occupied,
         "active_listing": result.active_listing,
         "listing_date": result.listing_date,
         "listing_status": result.listing_status,

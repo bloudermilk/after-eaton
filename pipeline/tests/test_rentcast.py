@@ -231,7 +231,6 @@ def test_normalize_properties_filters_pre_fire_and_carries_owner() -> None:
             "formattedAddress": "411 Punahou St, Altadena, CA 91001",
             "lastSaleDate": "2025-03-14T00:00:00.000Z",
             "lastSalePrice": 1250000,
-            "ownerOccupied": False,
             "owner": {"names": ["ACME HOMES LLC"], "type": "Organization"},
         },
         {
@@ -256,7 +255,6 @@ def test_normalize_properties_filters_pre_fire_and_carries_owner() -> None:
     assert info.sale_price == 1250000
     assert info.owner_name == "ACME HOMES LLC"
     assert info.owner_type == "Organization"
-    assert info.owner_occupied is False
 
 
 def test_normalize_properties_reports_unmatched() -> None:
@@ -390,7 +388,6 @@ def test_apply_sales_overlays_fields() -> None:
                 sale_price=1250000,
                 owner_name="JANE DOE",
                 owner_type="Individual",
-                owner_occupied=True,
             )
         },
         listings={
@@ -409,7 +406,6 @@ def test_apply_sales_overlays_fields() -> None:
     assert result.owner_name == "JANE DOE"
     # owner_class is derived from owner_name (not RentCast's owner_type).
     assert result.owner_class == "individual"
-    assert result.owner_occupied is True
     assert result.active_listing is True
     assert result.listing_date == "2026-05-01"
     # A parcel with both sale + listing resolves to "listed" on the map.
@@ -422,7 +418,7 @@ def test_apply_sales_overlays_fields() -> None:
 def test_sales_cache_roundtrip(tmp_path: Path) -> None:
     cache = SalesCache(
         sold={
-            "a": SaleInfo("a", "2025-04-01", 500000, "BUYER A", "Individual", True),
+            "a": SaleInfo("a", "2025-04-01", 500000, "BUYER A", "Individual"),
         },
         listings={
             "b": ListingInfo("b", "2026-06-01", "Active", 750000),
@@ -447,7 +443,7 @@ def test_load_missing_cache_is_empty(tmp_path: Path) -> None:
 
 def test_prune_sales_cache_drops_unknown_ains() -> None:
     cache = SalesCache(
-        sold={"keep": SaleInfo("keep", "2025-04-01", 1, None, None, None)},
+        sold={"keep": SaleInfo("keep", "2025-04-01", 1, None, None)},
         listings={"drop": ListingInfo("drop", "2026-01-01", "Active", 1)},
     )
     dropped = prune_sales_cache(cache, valid_ains={"keep"})
@@ -519,12 +515,14 @@ def test_sold_owner_and_listing_age_buckets_scoped_and_bucketed() -> None:
 
     # Per-parcel buckets resolve as expected (drives the map coloring/filter).
     assert sold_owner_bucket(parcels[0]) == "individual"
+    assert sold_owner_bucket(parcels[1]) == "trust"
+    assert sold_owner_bucket(parcels[2]) == "company"
     assert sold_owner_bucket(parcels[3]) == "unknown"
     assert sold_owner_bucket(parcels[4]) == "none"  # GREEN, out of population
     assert listing_age_bucket(parcels[5], as_of) == "under_30"
     assert listing_age_bucket(parcels[7], as_of) == "30_to_60"
-    assert listing_age_bucket(parcels[8], as_of) == "60_to_90"
-    assert listing_age_bucket(parcels[9], as_of) == "90_plus"
+    assert listing_age_bucket(parcels[8], as_of) == "60_plus"  # 66d
+    assert listing_age_bucket(parcels[9], as_of) == "60_plus"  # 200d
     assert listing_age_bucket(parcels[10], as_of) == "none"  # undated
 
     counts = count_parcels(parcels, as_of=as_of)
@@ -542,17 +540,15 @@ def test_sold_owner_and_listing_age_buckets_scoped_and_bucketed() -> None:
         == counts.property_sold_post_fire_count
     )
     # Listing-age bands; the dated ones sum to property_active_listing_count minus
-    # the single undated listing.
+    # the single undated listing. 60_plus collapses the old 60–90 and 90+ bands.
     assert counts.listing_age_under_30_count == 2  # l0, l1
     assert counts.listing_age_30_to_60_count == 1  # l2
-    assert counts.listing_age_60_to_90_count == 1  # l3
-    assert counts.listing_age_90_plus_count == 1  # l4
+    assert counts.listing_age_60_plus_count == 2  # l3 (66d) + l4 (200d)
     assert counts.property_active_listing_count == 6  # includes the undated one
     assert (
         counts.listing_age_under_30_count
         + counts.listing_age_30_to_60_count
-        + counts.listing_age_60_to_90_count
-        + counts.listing_age_90_plus_count
+        + counts.listing_age_60_plus_count
         == counts.property_active_listing_count - 1
     )
 

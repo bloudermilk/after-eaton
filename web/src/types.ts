@@ -59,20 +59,20 @@ export interface Summary {
   // and listed is rare but counts in both).
   property_sold_post_fire_count: number;
   property_active_listing_count: number;
-  // "Property sales" card: post-fire sales split by who bought (derived
-  // owner_class). The four partition property_sold_post_fire_count; the frontend
-  // shows the three named classes (individuals/trusts/companies) as its buckets.
+  // "Property sales" card: post-fire sales split by buyer owner_class
+  // (individual/trust/company; `unknown` = sold but no owner name). The four
+  // partition property_sold_post_fire_count; the card shows the three named
+  // classes.
   property_sold_to_individual_count: number;
   property_sold_to_trust_count: number;
   property_sold_to_company_count: number;
   property_sold_owner_unknown_count: number;
   // "Listings" card: active listings split by time on market (days as of the run
-  // date). The four sum to the active listings carrying a listing date, so their
-  // total is <= property_active_listing_count.
+  // date): <30 / 30–60 / 60+. The three sum to the active listings carrying a
+  // listing date, so their total is <= property_active_listing_count.
   listing_age_under_30_count: number;
   listing_age_30_to_60_count: number;
-  listing_age_60_to_90_count: number;
-  listing_age_90_plus_count: number;
+  listing_age_60_plus_count: number;
 }
 
 // Shape of parcels-compact.geojson — one Point per parcel carrying only the
@@ -133,7 +133,6 @@ export interface ParcelProperties {
   // Derived buyer class ("individual" | "trust" | "company", or null). The popup
   // shows this rather than owner_type (which mislabels trusts as "Organization").
   owner_class: string | null;
-  owner_occupied: boolean | null;
   active_listing: boolean;
   listing_date: string | null;
   listing_status: string | null;
