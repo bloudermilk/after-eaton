@@ -49,7 +49,7 @@ export interface Summary {
   adu_added_3_plus_count: number;
   dwelling_rebuild_count: number;
   // "Rebuild progress" split of the County's Destroyed/Damaged population (BSD
-  // Red/Yellow == bsd_red_or_yellow_count): parcels with no active EPIC permit
+  // Red/Yellow == bsd_red_or_yellow_count): parcels with no active EPIC case
   // vs. any. Mutually exclusive; the two sum to bsd_red_or_yellow_count.
   rebuild_progress_not_started_count: number;
   rebuild_progress_rebuilding_count: number;

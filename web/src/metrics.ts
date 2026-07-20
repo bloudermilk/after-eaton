@@ -111,7 +111,7 @@ export const METRICS: MetricDef[] = [
     chart: "vbars",
     valueExpr: get("rebuild_progress_bucket"),
     // The County's Destroyed/Damaged population (BSD Red/Yellow ==
-    // bsd_red_or_yellow_count) split by whether any active EPIC permit exists.
+    // bsd_red_or_yellow_count) split by whether any active EPIC case exists.
     // The two buckets are mutually exclusive and sum to the population, so the
     // card's percentages (share of the bucket total) read as 100%. Parcels
     // outside the population resolve to "none" and stay hidden on the map.

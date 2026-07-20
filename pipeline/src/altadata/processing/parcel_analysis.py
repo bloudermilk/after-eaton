@@ -96,7 +96,7 @@ class ParcelResult:
     debris_cleared: str | None
     dins_count: int
     # Count of the parcel's ACTIVE fire EPIC cases (post `filter_fire_cases` +
-    # `filter_active_cases`). > 0 means the parcel has at least one live permit
+    # `filter_active_cases`). > 0 means the parcel has at least one live case
     # in any stage; 0 means none have been filed. Drives the "Rebuild progress"
     # not-started-vs-rebuilding split (see aggregate.rebuild_progress_bucket).
     fire_case_count: int = 0

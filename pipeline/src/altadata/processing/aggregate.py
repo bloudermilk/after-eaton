@@ -162,7 +162,7 @@ def rebuild_progress_bucket(parcel: ParcelResult) -> str:
 
     The population is the BSD Red- or Yellow-tagged parcels (what LA County's
     Recovery Map publishes as "Destroyed/Damaged Parcels"). Within it, a parcel
-    is `rebuilding` when it has any active fire EPIC case (a live permit in any
+    is `rebuilding` when it has any active fire EPIC case (a live case in any
     stage) and `not_started` when it has none. `none` = outside the population
     (no/green safety tag) — not shown or selectable on the map.
     """
